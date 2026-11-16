@@ -376,6 +376,77 @@ let SB_KEY = SUPABASE_KEY, keyFromPage = false;
 if (keyIsPlaceholder(SB_KEY)) { try { SB_KEY = localStorage.getItem('qa-sb-key') || ''; keyFromPage = !!SB_KEY; } catch (e) { SB_KEY = ''; } }
 try { if (SB_KEY) sb = window.supabase.createClient(SUPABASE_URL, SB_KEY); } catch (e) { console.error(e); }
 
+/* ---------- Login (each person sees only what they are allowed to) ---------- */
+let ME = null;                 // { name, admin, email }
+const LOGIN_DOMAIN = 'qa.local';   // "brwa" -> brwa@qa.local
+const loginEmail = u => { u = String(u || '').trim(); return u.includes('@') ? u.toLowerCase() : u.toLowerCase().replace(/\s+/g, '.') + '@' + LOGIN_DOMAIN; };
+
+function showLogin(errorText) {
+  hideSkeleton(); progress(100, 'Sign in');
+  if (document.getElementById('login-box')) return;
+  const box = document.createElement('div');
+  box.id = 'login-box';
+  box.style.cssText = 'position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:var(--bg,#0b1220);padding:16px;backdrop-filter:blur(8px)';
+  box.innerHTML = `<form class="card" style="background:var(--glass-strong);max-width:380px;width:100%;padding:26px">
+    <div style="font-size:30px;text-align:center">🔐</div>
+    <div class="h-sec" style="font-size:18px;text-align:center;margin:6px 0 2px">QA Dashboard</div>
+    <div class="sub" style="text-align:center;margin-bottom:18px;font-size:12px">Sign in with your username</div>
+    ${errorText ? `<div class="chip chip-red" style="margin-bottom:12px;white-space:normal">${esc(errorText)}</div>` : ''}
+    <input id="lg-user" class="ctl" style="width:100%;margin-bottom:10px" placeholder="Username" autocomplete="username">
+    <input id="lg-pass" class="ctl" style="width:100%" type="password" placeholder="Password" autocomplete="current-password">
+    <button id="lg-btn" class="btn btn-pri" style="width:100%;margin-top:14px" type="submit">Sign in</button>
+    <div id="lg-msg" class="sub" style="text-align:center;margin-top:10px;font-size:12px;color:#e11d48"></div></form>`;
+  document.body.appendChild(box);
+  box.querySelector('#lg-user').focus();
+  box.querySelector('form').onsubmit = async e => {
+    e.preventDefault();
+    const u = box.querySelector('#lg-user').value, pw = box.querySelector('#lg-pass').value;
+    if (!u.trim() || !pw) { box.querySelector('#lg-msg').textContent = 'Enter username and password'; return; }
+    const btn = box.querySelector('#lg-btn'); btn.disabled = true; btn.textContent = 'Signing in...';
+    const { error } = await sb.auth.signInWithPassword({ email: loginEmail(u), password: pw });
+    if (error) { btn.disabled = false; btn.textContent = 'Sign in'; box.querySelector('#lg-msg').textContent = /invalid/i.test(error.message) ? 'Wrong username or password' : error.message; return; }
+    location.reload();
+  };
+}
+
+async function signOut() {
+  try { const db = await idb(); db.transaction('kv', 'readwrite').objectStore('kv').delete(cacheKey()); } catch (e) {}
+  try { localStorage.removeItem('qa-ui'); } catch (e) {}
+  try { await sb.auth.signOut(); } catch (e) {}
+  location.reload();
+}
+
+// true = logged in and allowed; false = the login box is shown
+async function ensureLogin() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) { showLogin(''); return false; }
+  try { sb.realtime.setAuth(session.access_token); } catch (e) {}
+  const { data, error } = await sb.rpc('whoami');
+  if (error) { showLogin('Login is not set up yet: run login_step1.sql in Supabase. (' + error.message + ')'); await sb.auth.signOut(); return false; }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) { await sb.auth.signOut(); showLogin('This account is not linked to a user: in Supabase put its e-mail in the "users" table.'); return false; }
+  ME = { name: row.name, admin: !!row.is_admin, email: session.user.email };
+  applyRole();
+  return true;
+}
+
+// what each person sees
+function applyRole() {
+  const pill = document.createElement('span');
+  pill.className = 'chip';
+  pill.style.cssText = 'gap:8px;padding:6px 6px 6px 12px';
+  pill.innerHTML = `👤 ${esc(ME.name)}${ME.admin ? ' · admin' : ''} <button class="mini" id="signout-btn">Sign out</button>`;
+  const exportBtn = document.getElementById('export-btn');
+  exportBtn.parentElement.insertBefore(pill, exportBtn.parentElement.firstChild);
+  pill.querySelector('#signout-btn').onclick = signOut;
+  if (ME.admin) return;
+  // employee: only his/her own numbers (the database itself also only sends his/her own cases)
+  const hide = el => { if (el) el.style.display = 'none'; };
+  hide(document.getElementById('ulist')?.parentElement);
+  hide(document.getElementById('leaderboard-container')?.closest('.card'));
+  hide(document.getElementById('inactive-list')?.closest('.card'));
+}
+
 function askForKey(errorText) {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#0009;padding:16px';
@@ -659,6 +730,7 @@ async function fetchAll(cols, onProgress) {
 }
 
 async function loadUsers() {
+  if (ME && !ME.admin) { allUsers = [ME.name]; return; }
   const { data, error } = await sb.from('users').select('name').order('name');
   if (!error && data) allUsers = data.map(u => String(u.name).trim()).filter(Boolean);
 }
@@ -984,7 +1056,7 @@ function renderInactive() {
 
 function renderScope() {
   const n = selectedUsers.size;
-  $('scope-line').innerText = n ? `Showing ${n} selected user${n > 1 ? 's' : ''} · ${filteredData.length} rows` : `Showing all users · ${filteredData.length} rows`;
+  $('scope-line').innerText = (ME && !ME.admin) ? `Your cases · ${filteredData.length} rows` : (n ? `Showing ${n} selected user${n > 1 ? 's' : ''} · ${filteredData.length} rows` : `Showing all users · ${filteredData.length} rows`);
   const box = $('scope-chips'); box.innerHTML = '';
   [...selectedUsers].slice(0, 6).forEach(u => {
     const c = document.createElement('span'); c.className = 'chip'; c.textContent = formatText(u); box.appendChild(c);
@@ -1239,10 +1311,11 @@ async function exportExcel() {
 
 /* ---------- Start ---------- */
 const idb = () => new Promise((res, rej) => { const r = indexedDB.open('qa-dash', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
-const cacheGet = async () => { try { const db = await idb(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get('sb'); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (e) { return null; } };
+const cacheKey = () => 'sb:' + (ME ? ME.email : '');
+const cacheGet = async () => { try { const db = await idb(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(cacheKey()); q.onsuccess = () => res(q.result || null); q.onerror = () => res(null); }); } catch (e) { return null; } };
 const saveCache = debounce(async () => {
   if (!rawData.length) return;
-  try { const db = await idb(); db.transaction('kv', 'readwrite').objectStore('kv').put({ v: 3, url: SUPABASE_URL, lastUpdMs, users: allUsers, data: rawData }, 'sb'); } catch (e) {}
+  try { const db = await idb(); db.transaction('kv', 'readwrite').objectStore('kv').put({ v: 3, url: SUPABASE_URL, lastUpdMs, users: allUsers, data: rawData }, cacheKey()); } catch (e) {}
 }, 1000);
 
 function saveUI() {
@@ -1273,7 +1346,8 @@ async function start() {
     warn('Put your SUPABASE_URL and SUPABASE_KEY at the top of the script.');
     return;
   }
-  // 1) show the saved copy instantly  2) download only what changed  3) go live
+  // 0) who is this?  1) show the saved copy instantly  2) download only what changed  3) go live
+  if (!(await ensureLogin())) return;
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
