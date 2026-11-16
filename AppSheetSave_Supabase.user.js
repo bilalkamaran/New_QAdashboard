@@ -278,7 +278,7 @@
                 <div id="appsheet-pro-header" style="background: ${headerBg}; color: ${headerColor}; padding: 14px 16px; font-weight: 600; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: grab; border-bottom: 1px solid rgba(255, 255, 255, 0.1);">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 16px;">⚡</span>
-                        <span style="letter-spacing: 0.4px;">Save Data & API</span>
+                        <span style="letter-spacing: 0.4px;">Save Data</span>
                     </div>
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <button id="appsheet-theme-btn" title="Toggle Dark/Light Mode" style="background: rgba(255,255,255,0.15); border: 1px solid rgba(255,255,255,0.2); border-radius: 6px; color: #fff; cursor: pointer; font-size: 13px; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; transition: all 0.2s;">${isDarkMode ? '🌞' : '🌙'}</button>
