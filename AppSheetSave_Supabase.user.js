@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        AppSheetSave Pro API (Supabase)
+// @name        AppSheetSave
 // @namespace   bilalkamaran-qa
 // @version     1.0.0
 // @description Saves AppSheet cases to Supabase
