@@ -778,6 +778,8 @@ function rebuild() {
     const t = (r[taskKey] || '').toString().trim(); if (t) tasks.add(t);
     for (const k in r) { if (HIDDEN.has(k) || used.has(k) || r[k] === '') continue; used.add(k); order.push(k); }
   });
+  // forget selected users that no longer exist (deleted / renamed in Supabase)
+  [...selectedUsers].forEach(u => { if (!(u in userTotals)) selectedUsers.delete(u); });
   headers = order.slice().sort((a, b) => (colIndex[a] ?? 1e6) - (colIndex[b] ?? 1e6));
   const hs = headers.join('\u0001');
   if (hs !== headSig) { headSig = hs; dateKeyCache = null; renderHead(); }
@@ -823,6 +825,8 @@ function startRealtime() {
   if (!sb) return;
   sb.channel('cases-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, onChange)
+    // a user added / renamed / deleted in Supabase shows up at once (needs "users" in the realtime publication)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, debounce(() => { loadUsers().then(() => { refreshAll(); saveCache(); }); }, 300))
     .subscribe(status => {
       if (status === 'SUBSCRIBED') { setLive(true); catchUp(); }   // catch anything missed while disconnected
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { setLive(false); $('ptext').innerText = 'Reconnecting...'; }
