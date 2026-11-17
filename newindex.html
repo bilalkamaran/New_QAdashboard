@@ -447,6 +447,70 @@ function applyRole() {
   hide(document.getElementById('inactive-list')?.closest('.card'));
 }
 
+/* ---------- Team activity: who is on the dashboard now, and when each person was last here (admin only) ---------- */
+let presenceCh = null, onlineNow = new Set(), onlineSince = {}, teamRows = null;
+function agoText(ts) {
+  if (!ts) return 'never';
+  const d = new Date(ts), s = (Date.now() - d) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (new Date().toDateString() === d.toDateString()) return 'today ' + hm;
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  if (y.toDateString() === d.toDateString()) return 'yesterday ' + hm;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + hm;
+}
+function buildTeamCard() {
+  const lb = document.getElementById('leaderboard-container')?.closest('.card');
+  if (!lb || document.getElementById('team-card')) return;
+  const card = document.createElement('div');
+  card.className = lb.className; card.id = 'team-card';
+  card.innerHTML = `<div class="flex items-center justify-between mb-3"><div><div class="h-sec">👥 Team activity</div>
+    <div class="sub" style="font-size:12px">Who is on the dashboard now · last time each person was here</div></div>
+    <span class="chip" id="team-online">0 online</span></div><div id="team-list" class="sub" style="font-size:13px">Loading...</div>`;
+  lb.insertAdjacentElement('afterend', card);
+}
+function renderTeam() {
+  const box = document.getElementById('team-list'); if (!box) return;
+  document.getElementById('team-online').textContent = onlineNow.size + ' online';
+  if (!teamRows) return;
+  const rows = teamRows.map(r => ({ ...r, on: onlineNow.has(r.name) }))
+    .sort((a, b) => (b.on - a.on) || (new Date(b.last_seen || 0) - new Date(a.last_seen || 0)) || a.name.localeCompare(b.name));
+  box.innerHTML = rows.map(r => {
+    const dot = r.on ? '🟢' : (r.last_seen ? '⚪' : '⚫');
+    const hm = t => new Date(t).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    const seen = r.on
+      ? '<b style="color:#16a34a">On the website now</b>' + (onlineSince[r.name] ? ' · opened ' + hm(onlineSince[r.name]) : '')
+      : (r.has_login ? (r.last_seen ? 'Left: ' + agoText(r.last_seen) : 'Never opened') : '<i>no login yet</i>');
+    return `<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 2px;border-bottom:1px solid rgba(127,127,127,.15)">
+      <span>${dot} <b>${esc(formatText ? formatText(r.name) : r.name)}</b></span>
+      <span style="text-align:right">${seen}<br><span style="font-size:11px;opacity:.7">Last save: ${agoText(r.last_save)}</span></span></div>`;
+  }).join('') || 'No users';
+}
+async function loadTeam() {
+  const { data, error } = await sb.rpc('team_activity');
+  const box = document.getElementById('team-list');
+  if (error) { if (box) box.innerHTML = 'Run step_activity.sql in Supabase to turn this on.'; return; }
+  teamRows = data || []; renderTeam();
+}
+function startPresence() {
+  if (!ME || presenceCh) return;
+  presenceCh = sb.channel('online-users', { config: { presence: { key: ME.name } } });
+  presenceCh.on('presence', { event: 'sync' }, () => {
+    const st = presenceCh.presenceState();
+    onlineNow = new Set(Object.keys(st));
+    onlineSince = {};
+    Object.keys(st).forEach(k => { const ats = (st[k] || []).map(m => m.at).filter(Boolean); if (ats.length) onlineSince[k] = Math.min(...ats); });
+    renderTeam();
+  })
+    .subscribe(async st => { if (st === 'SUBSCRIBED') { try { await presenceCh.track({ at: Date.now() }); } catch (e) {} } });
+  const beat = () => { sb.rpc('touch_seen').then(() => {}, () => {}); };
+  beat();
+  setInterval(() => { if (!document.hidden) beat(); }, 120000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) beat(); });
+  if (ME.admin) { buildTeamCard(); loadTeam(); setInterval(loadTeam, 60000); setInterval(renderTeam, 30000); }
+}
+
 function askForKey(errorText) {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#0009;padding:16px';
@@ -1348,6 +1412,7 @@ async function start() {
   }
   // 0) who is this?  1) show the saved copy instantly  2) download only what changed  3) go live
   if (!(await ensureLogin())) return;
+  startPresence();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
