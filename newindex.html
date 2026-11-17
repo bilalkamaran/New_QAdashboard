@@ -70,6 +70,26 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .tm-save b{display:block;font-size:11px;color:var(--ink);font-weight:700}
 .tm-empty{padding:14px 10px;font-size:12px;color:var(--mute)}
 
+/* TODAY RANK (employees) */
+#rank-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:18px;padding:18px 22px}
+#rank-card::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 140% at 0% 0%,rgba(13,148,136,.16),transparent 55%),radial-gradient(120% 140% at 100% 100%,rgba(79,70,229,.14),transparent 55%);pointer-events:none}
+#rank-card.gold::before{background:radial-gradient(120% 140% at 0% 0%,rgba(245,158,11,.25),transparent 55%),radial-gradient(120% 140% at 100% 100%,rgba(234,179,8,.14),transparent 55%)}
+.rk-badge{position:relative;width:68px;height:68px;border-radius:20px;display:grid;place-items:center;flex-shrink:0;background:var(--grad);color:#fff;box-shadow:0 12px 26px -10px rgba(79,70,229,.6),inset 0 1px 0 rgba(255,255,255,.35)}
+.gold .rk-badge{background:linear-gradient(135deg,#f59e0b,#eab308);box-shadow:0 12px 26px -10px rgba(245,158,11,.7),inset 0 1px 0 rgba(255,255,255,.4)}
+.rk-badge small{position:absolute;top:7px;font-size:9px;font-weight:800;letter-spacing:.08em;opacity:.85}
+.rk-badge b{font-size:28px;font-weight:800;line-height:1;margin-top:8px}
+.rk-main{position:relative;min-width:0;flex:1}
+.rk-title{font-size:17px;font-weight:800;letter-spacing:-.01em}
+.rk-sub{font-size:12.5px;color:var(--mute);font-weight:600;margin-top:3px}
+.rk-sub b{color:var(--ink)}
+.rk-bar{height:7px;border-radius:99px;background:rgba(127,127,127,.15);margin-top:10px;overflow:hidden}
+.rk-bar i{display:block;height:100%;border-radius:99px;background:var(--grad);transition:width .6s ease}
+.gold .rk-bar i{background:linear-gradient(90deg,#f59e0b,#eab308)}
+.rk-side{position:relative;text-align:right;flex-shrink:0}
+.rk-side b{display:block;font-size:24px;font-weight:800;line-height:1.1}
+.rk-side span{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
+@media(max-width:640px){.rk-side{display:none}}
+
 /* CARDS */
 .card{
   background:var(--glass);-webkit-backdrop-filter:var(--blur);backdrop-filter:var(--blur);
@@ -564,6 +584,43 @@ function startPresence() {
   if (ME.admin) { buildTeamCard(); loadTeam(); setInterval(loadTeam, 60000); setInterval(renderTeam, 30000); }
 }
 
+/* ---------- Today's rank: employees see only their own position (numbers, no names) ---------- */
+async function loadRank() {
+  const { data, error } = await sb.rpc('today_rank');
+  const r = Array.isArray(data) ? data[0] : data;
+  let card = document.getElementById('rank-card');
+  if (error || !r) { if (card) card.remove(); return; }
+  if (!card) {
+    card = document.createElement('div'); card.id = 'rank-card'; card.className = 'card';
+    document.getElementById('kpis').insertAdjacentElement('beforebegin', card);
+  }
+  const first = r.my_rank === 1;
+  card.classList.toggle('gold', first);
+  const pct = r.leader ? Math.round(r.my_count / r.leader * 100) : 0;
+  let title, sub;
+  if (!r.my_count) {
+    title = 'You have not sent a case today yet';
+    sub = r.people ? `${r.people} ${r.people === 1 ? 'person has' : 'people have'} started · #1 has <b>${r.leader}</b> cases` : 'Be the first one today 🚀';
+  } else if (first) {
+    title = r.people > 1 ? '🥇 You are #1 today. Great work!' : '🥇 You are #1 today. Keep going!';
+    sub = `<b>${r.my_count}</b> cases sent · ${r.people} ${r.people === 1 ? 'person' : 'people'} working today`;
+  } else {
+    title = `Today you are #${r.my_rank} of ${r.people}`;
+    sub = `<b>${r.next_gap}</b> more ${r.next_gap === 1 ? 'case' : 'cases'} to reach #${r.my_rank - 1} · #1 has <b>${r.leader}</b> cases`;
+  }
+  card.innerHTML = `<div class="rk-badge"><small>TODAY</small><b>${r.my_count ? '#' + r.my_rank : '–'}</b></div>
+    <div class="rk-main"><div class="rk-title">${title}</div><div class="rk-sub">${sub}</div>
+    <div class="rk-bar"><i style="width:${first ? 100 : pct}%"></i></div></div>
+    <div class="rk-side"><b>${r.my_count}</b><span>My cases today</span></div>`;
+}
+const loadRankSoon = (() => { let t; return () => { clearTimeout(t); t = setTimeout(loadRank, 1500); }; })();
+function startRank() {
+  if (!ME || ME.admin) return;
+  loadRank();
+  setInterval(() => { if (!document.hidden) loadRank(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadRank(); });
+}
+
 function askForKey(errorText) {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#0009;padding:16px';
@@ -1008,6 +1065,7 @@ function onChange(p) {
     const row = toRow(p.new); byId.set(p.new.id, row); trackUpd(row);
   } else return;
   scheduleRefresh();
+  if (ME && !ME.admin) loadRankSoon();
 }
 
 function startRealtime() {
@@ -1466,6 +1524,7 @@ async function start() {
   // 0) who is this?  1) show the saved copy instantly  2) download only what changed  3) go live
   if (!(await ensureLogin())) return;
   startPresence();
+  startRank();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
