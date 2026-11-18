@@ -70,6 +70,10 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .tm-save b{display:block;font-size:11px;color:var(--ink);font-weight:700}
 .tm-empty{padding:14px 10px;font-size:12px;color:var(--mute)}
 
+/* EMPLOYEE DAILY TARGET (Today card) */
+.tg-of{font-size:.55em;font-weight:700;color:var(--mute);margin-left:2px}
+.tg-txt{font-size:10.5px;font-weight:700;margin-top:5px;color:var(--mute)}
+
 /* TODAY RANK (employees) */
 #rank-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:18px;padding:18px 22px}
 #rank-card::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 140% at 0% 0%,rgba(13,148,136,.16),transparent 55%),radial-gradient(120% 140% at 100% 100%,rgba(79,70,229,.14),transparent 55%);pointer-events:none}
@@ -339,7 +343,7 @@ body.loading .h-64 canvas{visibility:hidden}
 
   <div id="kpis" class="grid grid-cols-2 lg:grid-cols-5 gap-4">
     <div class="card card-hover kpi" style="--k:#64748b"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h10"/></svg></div><div><span class="sub">Total rows</span><b id="stat-total">0</b></div></div>
-    <div class="card card-hover kpi" style="--k:#10b981"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></div><div><span class="sub">Today</span><b id="stat-daily">0</b></div></div>
+    <div class="card card-hover kpi" style="--k:#10b981"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg></div><div class="flex-1 min-w-0"><span class="sub">Today</span><b id="stat-daily">0</b><div id="today-goal" class="hidden"></div></div></div>
     <div class="card card-hover kpi" style="--k:#8b5cf6"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg></div><div><span class="sub">Last 7 days</span><b id="stat-weekly">0</b></div></div>
     <div class="card card-hover kpi" style="--k:#4f46e5"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path stroke-linecap="round" d="M8 3v4m8-4v4M3 10h18"/></svg></div><div><span class="sub">This month</span><b id="stat-monthly">0</b></div></div>
     <div class="card card-hover kpi" style="--k:#f59e0b"><div class="kpi-ic"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8M12 17v4M7 4h10v5a5 5 0 01-10 0V4zM7 6H4v1a3 3 0 003 3M17 6h3v1a3 3 0 01-3 3"/></svg></div><div><span class="sub">This year</span><b id="stat-yearly">0</b></div></div>
@@ -497,6 +501,8 @@ function applyRole() {
   hide(document.getElementById('ulist')?.parentElement);
   hide(document.getElementById('leaderboard-container')?.closest('.card'));
   hide(document.getElementById('inactive-list')?.closest('.card'));
+  hide(document.getElementById('all-target')?.parentElement);
+  document.getElementById('today-goal')?.classList.remove('hidden');
 }
 
 /* ---------- Team activity: who is on the dashboard now, and when each person was last here (admin only) ---------- */
@@ -617,7 +623,7 @@ const loadRankSoon = (() => { let t; return () => { clearTimeout(t); t = setTime
 function startRank() {
   if (!ME || ME.admin) return;
   loadRank();
-  setInterval(() => { if (!document.hidden) loadRank(); }, 60000);
+  setInterval(() => { if (!document.hidden) { loadRank(); loadUsers().then(refreshTargetViews); } }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadRank(); });
 }
 
@@ -904,9 +910,27 @@ async function fetchAll(cols, onProgress) {
 }
 
 async function loadUsers() {
-  if (ME && !ME.admin) { allUsers = [ME.name]; return; }
-  const { data, error } = await sb.from('users').select('name').order('name');
-  if (!error && data) allUsers = data.map(u => String(u.name).trim()).filter(Boolean);
+  // targets come from the database (only the admin can change them)
+  let q = sb.from('users').select('name,daily_target');
+  if (ME && !ME.admin) q = q.eq('name', ME.name);
+  let { data, error } = await q.order('name');
+  if (error) {   // step_target.sql not run yet: names only
+    let q2 = sb.from('users').select('name');
+    if (ME && !ME.admin) q2 = q2.eq('name', ME.name);
+    ({ data, error } = await q2.order('name'));
+  }
+  if (error || !data) { if (ME && !ME.admin) allUsers = [ME.name]; return; }
+  const t = {};
+  data.forEach(u => { if (u.daily_target != null) t[String(u.name).trim()] = +u.daily_target || 0; });
+  targets = t;
+  const vals = Object.values(t);
+  if (vals.length) {   // the most common target = the "Apply to all" value
+    const n = {}; vals.forEach(v => n[v] = (n[v] || 0) + 1);
+    defaultTarget = +Object.keys(n).sort((a, b) => n[b] - n[a])[0];
+    const box = document.getElementById('all-target');
+    if (box && document.activeElement !== box) box.value = defaultTarget;
+  }
+  allUsers = (ME && !ME.admin) ? [ME.name] : data.map(u => String(u.name).trim()).filter(Boolean);
 }
 async function probeUpd() {
   hasUpd = !(await sb.from('cases').select('updated_at').limit(1)).error;
@@ -1275,6 +1299,13 @@ function renderTable() {
 function renderKpisAndBoard(c) {
   $('stat-total').innerText = filteredData.length;
   $('stat-daily').innerText = c.daily; $('stat-weekly').innerText = c.weekly;
+  if (ME && !ME.admin) {   // employee: own daily target (set by the admin)
+    const tg = getTarget(ME.name), pct = tg > 0 ? Math.round(c.daily / tg * 100) : 0, col = pctColor(pct);
+    $('stat-daily').innerHTML = `${c.daily}<span class="tg-of"> / ${tg || '–'}</span>`;
+    $('today-goal').innerHTML = tg > 0
+      ? `<div class="pb" style="margin-top:8px"><i style="width:${Math.min(100, pct)}%;background:${col}"></i></div><div class="tg-txt" style="color:${col}">${pct >= 100 ? '🔥 Target reached!' : pct + '% of daily target'}</div>`
+      : '<div class="tg-txt">No target set</div>';
+  }
   $('stat-monthly').innerText = c.monthly; $('stat-yearly').innerText = c.yearly;
 
   const perUser = {}, todayPer = {};
@@ -1320,7 +1351,7 @@ function renderKpisAndBoard(c) {
       <td><div class="flex items-center gap-2.5"><span class="av" style="width:28px;height:28px;border-radius:9px;font-size:10px;background:${avatarColor(it.raw)}">${esc(initials(it.user))}</span><span class="font-semibold">${esc(it.user)}</span>${tg > 0 && it.pct >= 100 ? '<span class="chip chip-ok">✓ Goal</span>' : ''}</div></td>
       <td>${Object.keys(it.tasks).map(t => `<span class="chip tc" style="--c:${taskColor(t)}">${esc(t)}</span>`).join(' ')}</td>
       <td class="text-right font-extrabold" style="color:var(--acc)">${it.count}</td>
-      <td><input type="number" min="0" data-u="${esc(it.raw)}" value="${tg}" onchange="setTarget(this.dataset.u,this.value)" class="ctl !py-0.5 !px-1.5 !text-[11px] w-16"></td>
+      <td>${ME && ME.admin ? `<input type="number" min="0" data-u="${esc(it.raw)}" value="${tg}" onchange="setTarget(this.dataset.u,this.value)" class="ctl !py-0.5 !px-1.5 !text-[11px] w-16">` : `<b>${tg || '–'}</b>`}</td>
       <td style="min-width:160px">${tg > 0 ? `<div class="flex items-center gap-2"><div class="pb flex-1"><i style="width:${Math.min(100, it.pct)}%;background:${col}"></i></div><b style="color:${col}">${it.pct}%</b></div>` : '<span class="sub">no target</span>'}</td></tr>`;
   }).join('') : `<tr><td colspan="6" class="text-center opacity-50 !py-6">No activity recorded today.</td></tr>`;
 }
@@ -1368,18 +1399,26 @@ function renderCharts(data, c) {
 }
 
 /* ---------- Daily targets ---------- */
+// Saved in Supabase (users.daily_target). Only the admin can change them; everyone sees the change live.
 let targets = {}, defaultTarget = 30;
-function loadTargets() {
-  try { const t = JSON.parse(localStorage.getItem('qa-targets') || 'null'); if (t) { targets = t.users || {}; if (t.def != null) defaultTarget = +t.def || 0; } } catch (e) {}
-  $('all-target').value = defaultTarget;
-}
-function saveTargets() { try { localStorage.setItem('qa-targets', JSON.stringify({ users: targets, def: defaultTarget })); } catch (e) {} }
+function loadTargets() { $('all-target').value = defaultTarget; }
 const cleanNum = v => { v = parseInt(v, 10); return v > 0 ? v : 0; };
 const getTarget = u => (u in targets) ? targets[u] : defaultTarget;
 const pctColor = p => p >= 100 ? '#10b981' : p >= 50 ? '#f59e0b' : '#f43f5e';
 function refreshTargetViews() { renderDash(); }
-function setTarget(u, v) { targets[u] = cleanNum(v); saveTargets(); refreshTargetViews(); }
-function setAllTargets() { defaultTarget = cleanNum($('all-target').value); targets = {}; saveTargets(); refreshTargetViews(); }
+async function setTarget(u, v) {
+  if (!ME || !ME.admin) return;
+  const old = getTarget(u); targets[u] = cleanNum(v); refreshTargetViews();
+  const { error } = await sb.rpc('set_target', { p_name: u, p_target: targets[u] });
+  if (error) { targets[u] = old; refreshTargetViews(); warn('Target not saved: ' + error.message + ' (run step_target.sql in Supabase)'); }
+}
+async function setAllTargets() {
+  if (!ME || !ME.admin) return;
+  const v = cleanNum($('all-target').value), old = { ...targets }, oldDef = defaultTarget;
+  defaultTarget = v; Object.keys(targets).forEach(k => targets[k] = v); refreshTargetViews();
+  const { error } = await sb.rpc('set_all_targets', { p_target: v });
+  if (error) { targets = old; defaultTarget = oldDef; $('all-target').value = oldDef; refreshTargetViews(); warn('Targets not saved: ' + error.message + ' (run step_target.sql in Supabase)'); }
+}
 function toggleTheme() { document.documentElement.classList.toggle('dark'); renderCharts(filteredData); if (curUser) renderUserPanel(); }
 
 /* ---------- User page (side panel) ---------- */
