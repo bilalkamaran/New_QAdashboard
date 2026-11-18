@@ -97,7 +97,16 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 /* TARGET HISTORY (🎯 panel) */
 .th-tabs{display:flex;gap:4px;margin-top:10px}
 .th-tabs button{flex:1;font-size:11px;font-weight:700;padding:6px 4px;border-radius:10px;color:var(--mute);transition:all .15s}
-.th-tabs button.on{background:var(--grad);color:#fff;box-shadow:0 6px 14px -8px rgba(79,70,229,.7)}
+.th-tabs button.on,.th-month.on .lbl{background:var(--grad);color:#fff;box-shadow:0 6px 14px -8px rgba(79,70,229,.7)}
+.th-month{flex:1.6;display:flex;align-items:center;gap:2px}
+.th-month button[data-m]{flex:0 0 26px;padding:6px 0;font-size:10px}
+.th-month button[data-m]:hover:not(:disabled){background:rgba(127,127,127,.12)}
+.th-month button:disabled{opacity:.25;cursor:default}
+.th-month .lbl{flex:1;white-space:nowrap}
+.th-custom{display:flex;gap:8px;margin-top:8px}
+.th-custom label{flex:1;display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.th-custom input{font-size:12px;font-weight:600;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.6);box-shadow:inset 0 0 0 1px var(--glass-line);outline:none;color:var(--ink);text-transform:none;letter-spacing:0}
+.dark .th-custom input{background:rgba(255,255,255,.05);color-scheme:dark}
 .th-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;cursor:pointer;transition:background .15s}
 .th-row:hover{background:rgba(255,255,255,.5)}
 .dark .th-row:hover{background:rgba(255,255,255,.05)}
@@ -707,7 +716,7 @@ function topButton(id, html, title) {
 }
 
 /* ---------- 🎯 Target history: admin sees everybody, an employee only himself/herself ---------- */
-let thLog = null, thRange = 'month', thUser = null, thSel = null, thPanel = null;
+let thLog = null, thRange = 'month', thMonth = 0, thFrom = '', thTo = '', thUser = null, thSel = null, thPanel = null;
 const DAY = 864e5;
 const dayStart = t => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
 async function loadTargetLog() {
@@ -723,12 +732,21 @@ function targetOn(u, day) {   // the target that was set on that day
   for (const e of log) { if (e.day <= day) t = e.t; else break; }
   return t;
 }
+const isoDay = t => { const d = new Date(t); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const fromIso = v => { const [y, m, d] = v.split('-').map(Number); return new Date(y, m - 1, d).getTime(); };
 function thRangeDays() {
   const now = new Date(), today = dayStart(now);
-  if (thRange === 'week') return { from: today - 6 * DAY, to: today, label: 'Last 7 days' };
-  if (thRange === 'last') { const a = new Date(now.getFullYear(), now.getMonth() - 1, 1); return { from: a.getTime(), to: dayStart(new Date(now.getFullYear(), now.getMonth(), 0)), label: a.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }; }
-  const a = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { from: a.getTime(), to: dayStart(new Date(now.getFullYear(), now.getMonth() + 1, 0)), label: a.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) };
+  const short = t => new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  if (thRange === 'custom') {
+    if (!thFrom) thFrom = isoDay(new Date(now.getFullYear(), now.getMonth(), 1));
+    if (!thTo) thTo = isoDay(today);
+    let f = fromIso(thFrom), t = fromIso(thTo);
+    if (f > t) [f, t] = [t, f];
+    if (t - f > 366 * DAY) f = t - 366 * DAY;   // one year at most
+    return { from: f, to: t, label: short(f) + ' – ' + short(t) };
+  }
+  const a = new Date(now.getFullYear(), now.getMonth() + thMonth, 1);
+  return { from: a.getTime(), to: dayStart(new Date(a.getFullYear(), a.getMonth() + 1, 0)), label: a.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) };
 }
 function thCounts(from, to) {   // cases per user per day (all cases, filters ignored)
   const out = {};
@@ -763,7 +781,11 @@ function thTip(x) {
 function renderTH() {
   if (!thPanel) return;
   const P = thPanel.panel, R = thRangeDays(), counts = thCounts(R.from, R.to);
-  const tabs = `<div class="th-tabs">${[['week', '7 days'], ['month', 'This month'], ['last', 'Last month']].map(([k, l]) => `<button class="${thRange === k ? 'on' : ''}" data-r="${k}">${l}</button>`).join('')}</div>`;
+  const mName = new Date(new Date().getFullYear(), new Date().getMonth() + thMonth, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+  const tabs = `<div class="th-tabs">
+      <div class="th-month ${thRange === 'month' ? 'on' : ''}"><button data-m="-1" title="Previous month">◀</button><button data-r="month" class="lbl">${mName}</button><button data-m="1" title="Next month" ${thMonth >= 0 ? 'disabled' : ''}>▶</button></div>
+      <button class="${thRange === 'custom' ? 'on' : ''}" data-r="custom">Custom</button></div>
+    ${thRange === 'custom' ? `<div class="th-custom"><label>From<input type="date" id="th-from" value="${thFrom}" max="${isoDay(Date.now())}"></label><label>To<input type="date" id="th-to" value="${thTo}" max="${isoDay(Date.now())}"></label></div>` : ''}`;
   const who = ME.admin ? thUser : ME.name;
   let body;
   if (!who) {   // admin: everybody, best first
@@ -793,7 +815,9 @@ function renderTH() {
       <div class="th-leg"><span><i style="background:#1D9E75"></i>Reached</span><span><i style="background:#F09595"></i>Missed</span><span><i style="background:rgba(127,127,127,.25)"></i>Day off</span></div>`;
   }
   P.innerHTML = `<div class="tm-head"><div class="tm-title">${ME.admin ? 'Target history' : 'My target history'}</div>${tabs}</div><div class="tm-body" style="padding:10px 12px 14px">${body}</div>`;
-  P.querySelectorAll('.th-tabs button').forEach(b => b.onclick = () => { thRange = b.dataset.r; thSel = null; renderTH(); });
+  P.querySelectorAll('.th-tabs button[data-r]').forEach(b => b.onclick = () => { thRange = b.dataset.r; thSel = null; renderTH(); });
+  P.querySelectorAll('.th-tabs button[data-m]').forEach(b => b.onclick = () => { thMonth = Math.min(0, thMonth + +b.dataset.m); thRange = 'month'; thSel = null; renderTH(); });
+  ['th-from', 'th-to'].forEach(id => { const el = P.querySelector('#' + id); if (el) el.onchange = () => { if (!el.value) return; if (id === 'th-from') thFrom = el.value; else thTo = el.value; thSel = null; renderTH(); }; });
   P.querySelectorAll('.th-row').forEach(r => r.onclick = () => { thUser = r.dataset.u; thSel = null; renderTH(); });
   const back = P.querySelector('#th-back'); if (back) back.onclick = () => { thUser = null; renderTH(); };
   const tip = P.querySelector('#th-tip'), R2 = thRangeDays();
