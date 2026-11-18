@@ -42,12 +42,12 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .tm-btn{position:relative}
 .tm-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2);animation:tmPulse 2s infinite}
 @keyframes tmPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55)}70%{box-shadow:0 0 0 7px rgba(34,197,94,0)}100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}}
-#tm-panel{position:fixed;z-index:60;width:380px;max-width:calc(100vw - 24px);max-height:min(560px,calc(100vh - 100px));display:flex;flex-direction:column;
+#tm-panel,.gpanel{position:fixed;z-index:60;width:380px;max-width:calc(100vw - 24px);max-height:min(560px,calc(100vh - 100px));display:flex;flex-direction:column;
   background:linear-gradient(160deg,rgba(255,255,255,.72),rgba(255,255,255,.45));-webkit-backdrop-filter:blur(28px) saturate(180%);backdrop-filter:blur(28px) saturate(180%);
   border:1px solid rgba(255,255,255,.85);border-radius:22px;box-shadow:0 30px 60px -20px rgba(31,38,135,.35),inset 0 1px 0 rgba(255,255,255,.9);
   opacity:0;transform:translateY(-8px) scale(.98);transform-origin:top right;pointer-events:none;transition:opacity .18s ease,transform .18s ease}
-.dark #tm-panel{background:linear-gradient(160deg,rgba(23,32,52,.78),rgba(12,18,32,.6));border-color:rgba(255,255,255,.1);box-shadow:0 30px 60px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06)}
-#tm-panel.open{opacity:1;transform:none;pointer-events:auto}
+.dark #tm-panel,.dark .gpanel{background:linear-gradient(160deg,rgba(23,32,52,.78),rgba(12,18,32,.6));border-color:rgba(255,255,255,.1);box-shadow:0 30px 60px -20px rgba(0,0,0,.8),inset 0 1px 0 rgba(255,255,255,.06)}
+#tm-panel.open,.gpanel.open{opacity:1;transform:none;pointer-events:auto}
 .tm-head{padding:16px 18px 12px;border-bottom:1px solid var(--line)}
 .tm-title{font-size:15px;font-weight:800;letter-spacing:-.01em}
 .tm-stats{display:flex;gap:6px;margin-top:10px}
@@ -93,6 +93,64 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .rk-side b{display:block;font-size:24px;font-weight:800;line-height:1.1}
 .rk-side span{font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
 @media(max-width:640px){.rk-side{display:none}}
+
+/* TARGET HISTORY (🎯 panel) */
+.th-tabs{display:flex;gap:4px;margin-top:10px}
+.th-tabs button{flex:1;font-size:11px;font-weight:700;padding:6px 4px;border-radius:10px;color:var(--mute);transition:all .15s}
+.th-tabs button.on{background:var(--grad);color:#fff;box-shadow:0 6px 14px -8px rgba(79,70,229,.7)}
+.th-row{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:14px;cursor:pointer;transition:background .15s}
+.th-row:hover{background:rgba(255,255,255,.5)}
+.dark .th-row:hover{background:rgba(255,255,255,.05)}
+.th-medal{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex-shrink:0;font-size:12px;font-weight:800;color:var(--mute)}
+.th-medal svg{width:15px;height:15px}
+.th-bar{height:6px;border-radius:99px;background:rgba(127,127,127,.18);margin-top:5px;overflow:hidden}
+.th-bar i{display:block;height:100%;border-radius:99px;transition:width .5s ease}
+.th-back{font-size:12px;font-weight:700;color:var(--acc);margin-bottom:8px}
+.th-cal{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:34px;gap:5px}
+.th-wd{font-size:10px;font-weight:700;color:var(--mute);text-align:center}
+.th-day{border-radius:8px;display:grid;place-items:center;font-size:11px;font-weight:700;cursor:default;transition:transform .12s}
+.th-day:hover{transform:scale(1.12)}
+.th-day.hit{background:#1D9E75;color:#fff}
+.th-day.miss{background:#F09595;color:#fff}
+.th-day.off{background:rgba(127,127,127,.15);color:var(--mute)}
+.th-day.fut{border:1px dashed rgba(127,127,127,.3);color:var(--mute);opacity:.6}
+.th-day.sel{outline:2px solid var(--acc);outline-offset:1px}
+.th-tip{min-height:30px;margin-top:10px;padding:7px 10px;border-radius:10px;font-size:12px;font-weight:700;background:rgba(127,127,127,.1);text-align:center}
+.th-leg{display:flex;gap:12px;font-size:10.5px;font-weight:600;color:var(--mute);margin-top:8px;justify-content:center}
+.th-leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+@media(max-width:640px){.th-lbl{display:none}}
+@media(max-width:520px){#tm-panel,.gpanel{left:12px!important;right:12px!important;width:auto}}
+
+/* ADMIN MESSAGES (📢 ticker) */
+#msg-ticker{border-radius:16px;overflow:hidden}
+.mt-row{display:flex;align-items:stretch;overflow:hidden}
+.mt-row+.mt-row{border-top:1px solid var(--line)}
+.mt-tag{display:flex;align-items:center;gap:6px;padding:9px 12px;font-size:11px;font-weight:800;letter-spacing:.05em;flex-shrink:0;background:rgba(245,158,11,.14);color:#b45309}
+.dark .mt-tag{color:#fbbf24}
+.mt-view{flex:1;overflow:hidden;white-space:nowrap;padding:9px 0;font-size:13px;font-weight:600}
+.mt-track{display:inline-flex;width:max-content;will-change:transform}
+.mt-track span.m{padding:0 26px}
+.mt-track span.b{color:#f59e0b}
+@keyframes mtL{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes mtR{from{transform:translateX(0)}to{transform:translateX(50%)}}
+.mt-row.en .mt-track{animation:mtL var(--dur,30s) linear infinite}
+.mt-row.ku{flex-direction:row-reverse}
+.mt-row.ku .mt-view{direction:rtl;font-size:14px}
+.mt-row.ku .mt-track{animation:mtR var(--dur,30s) linear infinite;direction:rtl}
+#msg-ticker:hover .mt-track{animation-play-state:paused}
+.mc-area{width:100%;resize:none;font-size:13px;padding:10px 12px;border-radius:12px;background:rgba(255,255,255,.6);box-shadow:inset 0 0 0 1px var(--glass-line);outline:none;color:var(--ink)}
+.dark .mc-area{background:rgba(255,255,255,.05)}
+.mc-area:focus{box-shadow:inset 0 0 0 2px var(--acc)}
+.mc-dur{display:flex;gap:4px;margin:10px 0}
+.mc-dur button{font-size:11px;font-weight:700;padding:6px 9px;border-radius:9px;color:var(--mute);box-shadow:inset 0 0 0 1px var(--glass-line)}
+.mc-dur button.on{background:var(--grad);color:#fff;box-shadow:none}
+.mc-item{display:flex;align-items:center;gap:8px;padding:9px 4px;border-top:1px solid var(--line);font-size:13px}
+.mc-item .t{flex:1;min-width:0;word-break:break-word}
+.mc-item .x{font-size:10.5px;color:var(--mute);white-space:nowrap;font-weight:600}
+.mc-del{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;color:#e11d48;flex-shrink:0}
+.mc-del:hover{background:rgba(225,29,72,.1)}
+.mc-badge{min-width:18px;height:18px;padding:0 5px;border-radius:99px;background:#f59e0b;color:#fff;font-size:10px;font-weight:800;display:inline-grid;place-items:center}
 
 /* CARDS */
 .card{
@@ -333,6 +391,7 @@ body.loading .h-64 canvas{visibility:hidden}
 </header>
 
 <div class="flex-1 overflow-y-auto p-6 pb-24">
+<div id="msg-ticker" class="card hidden" style="margin-bottom:20px"></div>
 
 <div id="page-dashboard" class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3">
@@ -625,6 +684,224 @@ function startRank() {
   loadRank();
   setInterval(() => { if (!document.hidden) { loadRank(); loadUsers().then(refreshTargetViews); } }, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadRank(); });
+}
+
+/* ---------- Glass panels next to the top buttons ---------- */
+function makePanel(id, btn) {
+  const panel = document.createElement('div');
+  panel.id = id; panel.className = 'gpanel';
+  document.body.appendChild(panel);
+  const place = () => { const r = btn.getBoundingClientRect(); panel.style.top = (r.bottom + 10) + 'px'; panel.style.right = Math.max(12, innerWidth - r.right) + 'px'; };
+  panel.addEventListener('click', e => e.stopPropagation());
+  document.addEventListener('click', () => panel.classList.remove('open'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') panel.classList.remove('open'); });
+  addEventListener('resize', () => { if (panel.classList.contains('open')) place(); });
+  return { panel, place, open: () => { document.querySelectorAll('.gpanel.open,#tm-panel.open').forEach(p => p !== panel && p.classList.remove('open')); place(); panel.classList.add('open'); } };
+}
+function topButton(id, html, title) {
+  const btn = document.createElement('button');
+  btn.id = id; btn.className = 'btn'; btn.title = title; btn.innerHTML = html;
+  const exportBtn = document.getElementById('export-btn');
+  exportBtn.parentElement.insertBefore(btn, exportBtn);
+  return btn;
+}
+
+/* ---------- 🎯 Target history: admin sees everybody, an employee only himself/herself ---------- */
+let thLog = null, thRange = 'month', thUser = null, thSel = null, thPanel = null;
+const DAY = 864e5;
+const dayStart = t => { const d = new Date(t); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+async function loadTargetLog() {
+  const { data, error } = await sb.from('target_log').select('name,target,changed_at').order('changed_at');
+  thLog = {};
+  if (error || !data) return;   // step_history_messages.sql not run yet: today's target is used for every day
+  data.forEach(r => (thLog[r.name] = thLog[r.name] || []).push({ day: dayStart(r.changed_at), t: +r.target || 0 }));
+}
+function targetOn(u, day) {   // the target that was set on that day
+  const log = thLog && thLog[u];
+  if (!log || !log.length) return getTarget(u);
+  let t = log[0].t;
+  for (const e of log) { if (e.day <= day) t = e.t; else break; }
+  return t;
+}
+function thRangeDays() {
+  const now = new Date(), today = dayStart(now);
+  if (thRange === 'week') return { from: today - 6 * DAY, to: today, label: 'Last 7 days' };
+  if (thRange === 'last') { const a = new Date(now.getFullYear(), now.getMonth() - 1, 1); return { from: a.getTime(), to: dayStart(new Date(now.getFullYear(), now.getMonth(), 0)), label: a.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }; }
+  const a = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { from: a.getTime(), to: dayStart(new Date(now.getFullYear(), now.getMonth() + 1, 0)), label: a.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) };
+}
+function thCounts(from, to) {   // cases per user per day (all cases, filters ignored)
+  const out = {};
+  rawData.forEach(row => {
+    const m = meta(row); if (!m.d || m.day < from || m.day > to) return;
+    const u = m.u || 'Unknown', o = out[u] || (out[u] = {});
+    o[m.day] = (o[m.day] || 0) + 1;
+  });
+  return out;
+}
+function thStats(u, counts, from, to) {
+  const today = dayStart(Date.now()), days = [];
+  let worked = 0, hit = 0;
+  for (let d = from; d <= to; d = dayStart(d + DAY + 3600e3)) {
+    const n = (counts && counts[d]) || 0, tg = targetOn(u, d);
+    let st = d > today ? 'fut' : n === 0 ? 'off' : (tg > 0 && n >= tg) ? 'hit' : 'miss';
+    if (st === 'hit' || st === 'miss') { worked++; if (st === 'hit') hit++; }
+    days.push({ d, n, tg, st });
+  }
+  return { worked, hit, pct: worked ? Math.round(hit / worked * 100) : 0, days };
+}
+const MEDALS = [['#FAC775', '#633806', '#EF9F27'], ['#D3D1C7', '#444441', '#888780'], ['#F0997B', '#712B13', '#D85A30']];
+const medalSvg = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6"/><path stroke-linejoin="round" d="M8.5 10.2 5 3h5l2 4 2-4h5l-3.5 7.2"/></svg>';
+function thTip(x) {
+  const date = new Date(x.d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  if (x.st === 'fut') return date + ' · not yet';
+  if (x.st === 'off') return date + ' · Day off';
+  if (x.st === 'hit') return `${date} · ${x.n} / ${x.tg} ✅`;
+  return `${date} · ${x.n} / ${x.tg} · ${x.tg - x.n} short`;
+}
+function renderTH() {
+  if (!thPanel) return;
+  const P = thPanel.panel, R = thRangeDays(), counts = thCounts(R.from, R.to);
+  const tabs = `<div class="th-tabs">${[['week', '7 days'], ['month', 'This month'], ['last', 'Last month']].map(([k, l]) => `<button class="${thRange === k ? 'on' : ''}" data-r="${k}">${l}</button>`).join('')}</div>`;
+  const who = ME.admin ? thUser : ME.name;
+  let body;
+  if (!who) {   // admin: everybody, best first
+    const list = allUsers.map(u => ({ u, ...thStats(u, counts[u], R.from, R.to) }))
+      .sort((a, b) => b.hit - a.hit || b.pct - a.pct || a.u.localeCompare(b.u));
+    body = list.map((x, i) => {
+      const m = x.hit ? MEDALS[i] : null, nm = fmt(x.u), col = m ? m[2] : x.pct >= 50 ? '#1D9E75' : '#F09595';
+      return `<div class="th-row" data-u="${esc(x.u)}"><span class="th-medal" style="${m ? `background:${m[0]};color:${m[1]}` : ''}">${m ? medalSvg : i + 1}</span>
+        <span class="tm-av" style="width:30px;height:30px;border-radius:10px;font-size:11px;background:${avatarColor(nm)}">${esc(initials(nm))}</span>
+        <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span class="tm-name">${esc(nm)}</span><span style="font-weight:700;white-space:nowrap">${x.hit} / ${x.worked} days</span></div>
+        <div class="th-bar"><i style="width:${x.pct}%;background:${col}"></i></div></div></div>`;
+    }).join('') || '<div class="tm-empty">No users yet</div>';
+  } else {   // one person: summary + calendar
+    const x = thStats(who, counts[who], R.from, R.to), nm = fmt(who);
+    const col = x.pct >= 80 ? '#EF9F27' : x.pct >= 50 ? '#1D9E75' : '#F09595';
+    const lead = (new Date(R.from).getDay() + 6) % 7;   // Monday first
+    const sel = x.days.find(d => d.d === thSel) || x.days.find(d => d.d === dayStart(Date.now())) || x.days[x.days.length - 1];
+    body = `${ME.admin ? '<button class="th-back" id="th-back">← Back to everyone</button>' : ''}
+      <div style="display:flex;align-items:center;gap:12px;padding:4px 2px 14px">
+        <span class="th-medal" style="width:40px;height:40px;background:#FAC775;color:#633806">${medalSvg}</span>
+        <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;font-size:14px"><span style="font-weight:800">${ME.admin ? esc(nm) + ' · ' : ''}${x.hit} / ${x.worked} days</span><span style="font-weight:800;color:${col}">${x.pct}%</span></div>
+        <div class="th-bar" style="height:7px"><i style="width:${x.pct}%;background:${col}"></i></div></div></div>
+      <div class="sub" style="font-size:11px;font-weight:700;margin-bottom:6px">${esc(R.label)}</div>
+      <div class="th-cal">${['M', 'T', 'W', 'T', 'F', 'S', 'S'].map(d => `<div class="th-wd">${d}</div>`).join('')}${'<div></div>'.repeat(lead)}
+        ${x.days.map(d => `<div class="th-day ${d.st}${sel && d.d === sel.d ? ' sel' : ''}" data-d="${d.d}" title="${esc(thTip(d))}">${new Date(d.d).getDate()}</div>`).join('')}</div>
+      <div class="th-tip" id="th-tip">${sel ? esc(thTip(sel)) : ''}</div>
+      <div class="th-leg"><span><i style="background:#1D9E75"></i>Reached</span><span><i style="background:#F09595"></i>Missed</span><span><i style="background:rgba(127,127,127,.25)"></i>Day off</span></div>`;
+  }
+  P.innerHTML = `<div class="tm-head"><div class="tm-title">${ME.admin ? 'Target history' : 'My target history'}</div>${tabs}</div><div class="tm-body" style="padding:10px 12px 14px">${body}</div>`;
+  P.querySelectorAll('.th-tabs button').forEach(b => b.onclick = () => { thRange = b.dataset.r; thSel = null; renderTH(); });
+  P.querySelectorAll('.th-row').forEach(r => r.onclick = () => { thUser = r.dataset.u; thSel = null; renderTH(); });
+  const back = P.querySelector('#th-back'); if (back) back.onclick = () => { thUser = null; renderTH(); };
+  const tip = P.querySelector('#th-tip'), R2 = thRangeDays();
+  const days = who ? thStats(who, counts[who], R2.from, R2.to).days : [];
+  P.querySelectorAll('.th-day').forEach(el => {
+    const d = days.find(z => z.d === +el.dataset.d);
+    const show = () => { tip.textContent = thTip(d); P.querySelectorAll('.th-day.sel').forEach(s => s.classList.remove('sel')); el.classList.add('sel'); thSel = d.d; };
+    el.onmouseenter = show; el.onclick = show;   // hover on desktop, tap on mobile
+  });
+}
+function startTargetHistory() {
+  if (!ME || document.getElementById('th-btn')) return;
+  const btn = topButton('th-btn', '🎯 <span class="th-lbl">Targets</span>', ME.admin ? 'Target history' : 'My target history');
+  thPanel = makePanel('th-panel', btn);
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (thPanel.panel.classList.contains('open')) { thPanel.panel.classList.remove('open'); return; }
+    thPanel.panel.innerHTML = '<div class="tm-empty" style="padding:18px">Loading...</div>';
+    thPanel.open();
+    if (!thLog) await loadTargetLog();
+    renderTH();
+  });
+}
+function refreshTargetHistory() {   // a target was changed: reload the log next time / now if open
+  thLog = null;
+  if (thPanel && thPanel.panel.classList.contains('open')) loadTargetLog().then(renderTH);
+}
+
+/* ---------- 📢 Admin messages: a two-row ticker (English on top, Kurdish below) ---------- */
+let msgs = [], msgPanel = null, msgDur = 'today';
+const isKurdish = t => /[؀-ۿ]/.test(t);
+const liveMsgs = () => msgs.filter(m => !m.expires_at || new Date(m.expires_at) > new Date());
+async function loadMessages() {
+  const { data, error } = await sb.from('messages').select('id,body,created_at,expires_at').order('created_at');
+  if (error) { msgs = []; renderTicker(); return; }   // step_history_messages.sql not run yet
+  msgs = data || []; renderTicker(); renderMsgPanel();
+}
+function renderTicker() {
+  const box = document.getElementById('msg-ticker'); if (!box) return;
+  const live = liveMsgs(), en = live.filter(m => !isKurdish(m.body)), ku = live.filter(m => isKurdish(m.body));
+  const badge = document.getElementById('msg-count'); if (badge) { badge.textContent = live.length; badge.style.display = live.length ? '' : 'none'; }
+  if (!live.length) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  const icon = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linejoin="round" d="M3 10v4h3l6 4V6L6 10H3zM16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14"/></svg>';
+  const row = (list, cls, tag) => {
+    if (!list.length) return '';
+    const one = list.map(m => `<span class="m">${esc(m.body)}</span><span class="b">●</span>`).join('');
+    const len = list.reduce((a, m) => a + m.body.length, 0);
+    let rep = 1; while (rep * (len + 8 * list.length) < 280) rep++;   // long enough to fill the bar
+    const half = one.repeat(rep);
+    return `<div class="mt-row ${cls}"><span class="mt-tag">${icon}${tag}</span><div class="mt-view"><div class="mt-track" style="--dur:${Math.max(18, Math.round(rep * (len + 10 * list.length) / 6))}s">${half}${half}</div></div></div>`;
+  };
+  box.innerHTML = row(en, 'en', 'EN') + row(ku, 'ku', 'KU');
+  box.classList.remove('hidden');
+}
+function renderMsgPanel() {
+  if (!msgPanel) return;
+  const live = liveMsgs();
+  const when = m => { if (!m.expires_at) return 'until removed'; const d = new Date(m.expires_at); return (d - Date.now() < DAY && d.getDate() === new Date().getDate()) ? 'today' : 'until ' + d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); };
+  const P = msgPanel.panel, draft = P.querySelector('#mc-text')?.value || '';
+  P.innerHTML = `<div class="tm-head"><div class="tm-title">Message to the team</div></div>
+    <div class="tm-body" style="padding:12px 14px 14px">
+      <textarea id="mc-text" class="mc-area" rows="3" maxlength="300" placeholder="Write a message in English or Kurdish..."></textarea>
+      <div class="mc-dur">${[['today', 'Today only'], ['week', '1 week'], ['forever', 'Until removed']].map(([k, l]) => `<button data-k="${k}" class="${msgDur === k ? 'on' : ''}">${l}</button>`).join('')}
+        <span style="flex:1"></span><button id="mc-send" class="btn btn-pri" style="padding:6px 14px">Send</button></div>
+      <div id="mc-err" class="tm-sub" style="color:#e11d48;min-height:14px"></div>
+      <div class="tm-sec" style="padding:8px 4px 4px">Active messages · ${live.length}</div>
+      ${live.length ? live.slice().reverse().map(m => `<div class="mc-item"><span class="t" dir="auto">${esc(m.body)}</span><span class="x">${when(m)}</span><button class="mc-del" data-id="${m.id}" title="Remove"><svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button></div>`).join('') : '<div class="tm-empty">No messages right now</div>'}
+    </div>`;
+  const ta = P.querySelector('#mc-text'); ta.value = draft;
+  P.querySelectorAll('.mc-dur button[data-k]').forEach(b => b.onclick = () => { msgDur = b.dataset.k; P.querySelectorAll('.mc-dur button[data-k]').forEach(x => x.classList.toggle('on', x === b)); });
+  P.querySelector('#mc-send').onclick = sendMessage;
+  P.querySelectorAll('.mc-del').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const { error } = await sb.from('messages').delete().eq('id', +b.dataset.id);
+    if (error) { P.querySelector('#mc-err').textContent = 'Not removed: ' + error.message; b.disabled = false; return; }
+    msgs = msgs.filter(m => m.id !== +b.dataset.id); renderTicker(); renderMsgPanel();
+  });
+}
+async function sendMessage() {
+  const P = msgPanel.panel, ta = P.querySelector('#mc-text'), err = P.querySelector('#mc-err'), body = ta.value.trim();
+  if (!body) { err.textContent = 'Write a message first'; ta.focus(); return; }
+  let expires_at = null;
+  if (msgDur === 'today') { const d = new Date(); d.setHours(23, 59, 59, 999); expires_at = d.toISOString(); }
+  if (msgDur === 'week') expires_at = new Date(Date.now() + 7 * DAY).toISOString();
+  const btn = P.querySelector('#mc-send'); btn.disabled = true; btn.textContent = 'Sending...';
+  const { data, error } = await sb.from('messages').insert({ body, expires_at }).select('id,body,created_at,expires_at');
+  btn.disabled = false; btn.textContent = 'Send';
+  if (error) { err.textContent = 'Not sent: ' + error.message + ' (run step_history_messages.sql in Supabase)'; return; }
+  ta.value = '';
+  if (data && data[0] && !msgs.some(m => m.id === data[0].id)) msgs.push(data[0]);
+  renderTicker(); renderMsgPanel();
+}
+function startMessages() {
+  if (!ME) return;
+  if (ME.admin && !document.getElementById('msg-btn')) {
+    const btn = topButton('msg-btn', '📢 <span id="msg-count" class="mc-badge" style="display:none">0</span>', 'Message to the team');
+    msgPanel = makePanel('msg-panel', btn);
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      if (msgPanel.panel.classList.contains('open')) { msgPanel.panel.classList.remove('open'); return; }
+      renderMsgPanel(); msgPanel.open(); setTimeout(() => msgPanel.panel.querySelector('#mc-text')?.focus(), 50);
+    });
+  }
+  loadMessages();
+  sb.channel('messages-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'messages' }, debounce(loadMessages, 300))
+    .subscribe(() => {});
+  setInterval(() => { renderTicker(); if (msgPanel && msgPanel.panel.classList.contains('open')) renderMsgPanel(); }, 60000);   // expired messages disappear
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadMessages(); });
 }
 
 function askForKey(errorText) {
@@ -1097,7 +1374,7 @@ function startRealtime() {
   sb.channel('cases-live')
     .on('postgres_changes', { event: '*', schema: 'public', table: 'cases' }, onChange)
     // a user added / renamed / deleted in Supabase shows up at once (needs "users" in the realtime publication)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, debounce(() => { loadUsers().then(() => { refreshAll(); saveCache(); }); }, 300))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, debounce(() => { loadUsers().then(() => { refreshAll(); saveCache(); refreshTargetHistory(); }); }, 300))
     .subscribe(status => {
       if (status === 'SUBSCRIBED') { setLive(true); catchUp(); }   // catch anything missed while disconnected
       else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') { setLive(false); $('ptext').innerText = 'Reconnecting...'; }
@@ -1410,6 +1687,7 @@ async function setTarget(u, v) {
   if (!ME || !ME.admin) return;
   const old = getTarget(u); targets[u] = cleanNum(v); refreshTargetViews();
   const { error } = await sb.rpc('set_target', { p_name: u, p_target: targets[u] });
+  refreshTargetHistory();
   if (error) { targets[u] = old; refreshTargetViews(); warn('Target not saved: ' + error.message + ' (run step_target.sql in Supabase)'); }
 }
 async function setAllTargets() {
@@ -1417,6 +1695,7 @@ async function setAllTargets() {
   const v = cleanNum($('all-target').value), old = { ...targets }, oldDef = defaultTarget;
   defaultTarget = v; Object.keys(targets).forEach(k => targets[k] = v); refreshTargetViews();
   const { error } = await sb.rpc('set_all_targets', { p_target: v });
+  refreshTargetHistory();
   if (error) { targets = old; defaultTarget = oldDef; $('all-target').value = oldDef; refreshTargetViews(); warn('Targets not saved: ' + error.message + ' (run step_target.sql in Supabase)'); }
 }
 function toggleTheme() { document.documentElement.classList.toggle('dark'); renderCharts(filteredData); if (curUser) renderUserPanel(); }
@@ -1564,6 +1843,8 @@ async function start() {
   if (!(await ensureLogin())) return;
   startPresence();
   startRank();
+  startMessages();
+  startTargetHistory();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
