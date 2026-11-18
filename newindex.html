@@ -103,7 +103,9 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .th-month button[data-m]:hover:not(:disabled){background:rgba(127,127,127,.12)}
 .th-month button:disabled{opacity:.25;cursor:default}
 .th-month .lbl{flex:1;white-space:nowrap}
-.th-custom{display:flex;gap:8px;margin-top:8px}
+.th-custom{display:flex;gap:8px;margin-top:8px;align-items:flex-end}
+.th-reset{font-size:11px;font-weight:700;padding:7px 10px;border-radius:10px;color:#e11d48;box-shadow:inset 0 0 0 1px rgba(225,29,72,.3);flex-shrink:0}
+.th-reset:hover{background:rgba(225,29,72,.08)}
 .th-custom label{flex:1;display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
 .th-custom input{font-size:12px;font-weight:600;padding:6px 8px;border-radius:10px;background:rgba(255,255,255,.6);box-shadow:inset 0 0 0 1px var(--glass-line);outline:none;color:var(--ink);text-transform:none;letter-spacing:0}
 .dark .th-custom input{background:rgba(255,255,255,.05);color-scheme:dark}
@@ -785,7 +787,7 @@ function renderTH() {
   const tabs = `<div class="th-tabs">
       <div class="th-month ${thRange === 'month' ? 'on' : ''}"><button data-m="-1" title="Previous month">◀</button><button data-r="month" class="lbl">${mName}</button><button data-m="1" title="Next month" ${thMonth >= 0 ? 'disabled' : ''}>▶</button></div>
       <button class="${thRange === 'custom' ? 'on' : ''}" data-r="custom">Custom</button></div>
-    ${thRange === 'custom' ? `<div class="th-custom"><label>From<input type="date" id="th-from" value="${thFrom}" max="${isoDay(Date.now())}"></label><label>To<input type="date" id="th-to" value="${thTo}" max="${isoDay(Date.now())}"></label></div>` : ''}`;
+    ${thRange === 'custom' ? `<div class="th-custom"><label>From<input type="date" id="th-from" value="${thFrom}" max="${isoDay(Date.now())}"></label><label>To<input type="date" id="th-to" value="${thTo}" max="${isoDay(Date.now())}"></label><button id="th-reset" class="th-reset" title="Back to this month">Reset</button></div>` : ''}`;
   const who = ME.admin ? thUser : ME.name;
   let body;
   if (!who) {   // admin: everybody, best first
@@ -817,6 +819,7 @@ function renderTH() {
   P.innerHTML = `<div class="tm-head"><div class="tm-title">${ME.admin ? 'Target history' : 'My target history'}</div>${tabs}</div><div class="tm-body" style="padding:10px 12px 14px">${body}</div>`;
   P.querySelectorAll('.th-tabs button[data-r]').forEach(b => b.onclick = () => { thRange = b.dataset.r; thSel = null; renderTH(); });
   P.querySelectorAll('.th-tabs button[data-m]').forEach(b => b.onclick = () => { thMonth = Math.min(0, thMonth + +b.dataset.m); thRange = 'month'; thSel = null; renderTH(); });
+  const rs = P.querySelector('#th-reset'); if (rs) rs.onclick = () => { thFrom = ''; thTo = ''; thMonth = 0; thRange = 'month'; thSel = null; renderTH(); };
   ['th-from', 'th-to'].forEach(id => { const el = P.querySelector('#' + id); if (el) el.onchange = () => { if (!el.value) return; if (id === 'th-from') thFrom = el.value; else thTo = el.value; thSel = null; renderTH(); }; });
   P.querySelectorAll('.th-row').forEach(r => r.onclick = () => { thUser = r.dataset.u; thSel = null; renderTH(); });
   const back = P.querySelector('#th-back'); if (back) back.onclick = () => { thUser = null; renderTH(); };
