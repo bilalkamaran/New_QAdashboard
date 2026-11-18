@@ -748,7 +748,8 @@ function thStats(u, counts, from, to) {
     if (st === 'hit' || st === 'miss') { worked++; if (st === 'hit') hit++; }
     days.push({ d, n, tg, st });
   }
-  return { worked, hit, pct: worked ? Math.round(hit / worked * 100) : 0, days };
+  const total = days.reduce((a, x) => a + x.n, 0);
+  return { worked, hit, total, pct: worked ? Math.round(hit / worked * 100) : 0, days };
 }
 const MEDALS = [['#FAC775', '#633806', '#EF9F27'], ['#D3D1C7', '#444441', '#888780'], ['#F0997B', '#712B13', '#D85A30']];
 const medalSvg = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="15" r="6"/><path stroke-linejoin="round" d="M8.5 10.2 5 3h5l2 4 2-4h5l-3.5 7.2"/></svg>';
@@ -767,13 +768,13 @@ function renderTH() {
   let body;
   if (!who) {   // admin: everybody, best first
     const list = allUsers.map(u => ({ u, ...thStats(u, counts[u], R.from, R.to) }))
-      .sort((a, b) => b.hit - a.hit || b.pct - a.pct || a.u.localeCompare(b.u));
+      .sort((a, b) => b.hit - a.hit || b.pct - a.pct || b.total - a.total || a.u.localeCompare(b.u));
     body = list.map((x, i) => {
       const m = x.hit ? MEDALS[i] : null, nm = fmt(x.u), col = m ? m[2] : x.pct >= 50 ? '#1D9E75' : '#F09595';
       return `<div class="th-row" data-u="${esc(x.u)}"><span class="th-medal" style="${m ? `background:${m[0]};color:${m[1]}` : ''}">${m ? medalSvg : i + 1}</span>
         <span class="tm-av" style="width:30px;height:30px;border-radius:10px;font-size:11px;background:${avatarColor(nm)}">${esc(initials(nm))}</span>
         <div style="flex:1;min-width:0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:13px"><span class="tm-name">${esc(nm)}</span><span style="font-weight:700;white-space:nowrap">${x.hit} / ${x.worked} days</span></div>
-        <div class="th-bar"><i style="width:${x.pct}%;background:${col}"></i></div></div></div>`;
+        <div class="th-bar"><i style="width:${x.pct}%;background:${col}"></i></div><div class="tm-sub" style="font-size:10.5px;margin-top:3px">${x.total} cases</div></div></div>`;
     }).join('') || '<div class="tm-empty">No users yet</div>';
   } else {   // one person: summary + calendar
     const x = thStats(who, counts[who], R.from, R.to), nm = fmt(who);
