@@ -173,6 +173,24 @@ button.br-name:hover{box-shadow:inset 0 0 0 1px var(--acc)}
 .dark .br-add input{background:rgba(255,255,255,.05);color-scheme:dark}
 @media(max-width:520px){.br-g{margin-left:0}.br-time{width:96px}}
 
+/* FEEDBACK (💬 panel) */
+.fb-item{padding:10px 6px;border-top:1px solid var(--line)}
+.fb-item:first-child{border-top:none}
+.fb-item.seen{opacity:.62}
+.fb-head{display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px}
+.fb-new{width:8px;height:8px;border-radius:50%;background:#378ADD;flex-shrink:0}
+.fb-who{font-weight:800;display:inline-flex;align-items:center;gap:5px}
+.fb-tog>span:last-child{display:inline-flex;align-items:center;gap:6px}
+.fb-time{margin-left:auto;font-size:11px;color:var(--mute);font-weight:600;white-space:nowrap}
+.fb-body{font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.fb-tog{display:flex;align-items:center;gap:10px;margin-top:12px;font-size:13px;font-weight:700;cursor:pointer;user-select:none}
+.fb-tog input{display:none}
+.fb-sw{width:38px;height:22px;border-radius:99px;background:rgba(127,127,127,.3);position:relative;transition:background .2s;flex-shrink:0}
+.fb-sw i{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .2s;box-shadow:0 1px 3px rgba(0,0,0,.25)}
+.fb-tog input:checked+.fb-sw{background:var(--grad)}
+.fb-tog input:checked+.fb-sw i{left:19px}
+.fb-note{margin:4px 0 0 48px;font-size:11px}
+
 /* ADMIN MESSAGES (📢 ticker) */
 #msg-ticker{border-radius:16px;overflow:hidden}
 .mt-row{display:flex;align-items:stretch;overflow:hidden}
@@ -1120,6 +1138,89 @@ function startBreaks() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBreaks(); });
 }
 
+/* ---------- 💬 Feedback: users write to the admin, with their name or anonymously ---------- */
+let fbList = null, fbPanel = null, fbAnon = false, fbSent = false, fbErr = '';
+async function loadFeedback() {
+  if (!ME.admin) return;
+  const { data, error } = await sb.from('feedback').select('id,body,sender,created_at,seen').order('created_at', { ascending: false });
+  fbList = error ? null : (data || []);
+  renderFeedback();
+}
+function fbWhen(t) {
+  const d = new Date(t), today = new Date(), y = new Date(Date.now() - DAY);
+  const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return 'Today ' + hm;
+  if (d.toDateString() === y.toDateString()) return 'Yesterday ' + hm;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + hm;
+}
+const fbIcon = '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="6" cy="15" r="4"/><circle cx="18" cy="15" r="4"/><path d="M10 15a2 2 0 0 1 4 0M2.5 13 5 7h2M21.5 13 19 7h-2"/></svg>';
+function renderFeedback() {
+  const badge = document.getElementById('fb-count');
+  if (badge) { const n = ME.admin && fbList ? fbList.filter(f => !f.seen).length : 0; badge.textContent = n; badge.style.display = n ? '' : 'none'; }
+  if (!fbPanel || !fbPanel.panel.classList.contains('open')) return;
+  const P = fbPanel.panel;
+  if (ME.admin) {
+    if (!fbList) { P.innerHTML = '<div class="tm-head"><div class="tm-title">💬 Feedback</div></div><div class="tm-empty" style="padding:16px">Run step_feedback.sql in Supabase to turn this on.</div>'; return; }
+    const unseen = fbList.filter(f => !f.seen).length;
+    P.innerHTML = `<div class="tm-head"><div style="display:flex;justify-content:space-between;align-items:center"><div class="tm-title">💬 Feedback</div>${unseen ? `<span class="br-chip me">${unseen} new</span>` : `<span class="br-chip">${fbList.length} total</span>`}</div></div>
+      <div class="tm-body" style="padding:6px 12px 14px">${fbList.map(f => `<div class="fb-item${f.seen ? ' seen' : ''}">
+        <div class="fb-head">${f.seen ? '' : '<span class="fb-new"></span>'}<span class="fb-who">${f.sender ? esc(fmt(f.sender)) : fbIcon + ' Anonymous'}</span><span class="fb-time">${fbWhen(f.created_at)}</span>
+        <button class="br-del" data-fbdel="${f.id}" title="Delete"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button></div>
+        <div class="fb-body" dir="auto">${esc(f.body)}</div></div>`).join('') || '<div class="tm-empty" style="padding:14px 4px">No feedback yet</div>'}</div>`;
+    P.querySelectorAll('[data-fbdel]').forEach(b => b.onclick = async () => {
+      if (!confirmTwice(b)) return;
+      const { error } = await sb.from('feedback').delete().eq('id', +b.dataset.fbdel);
+      if (!error) { fbList = fbList.filter(f => f.id !== +b.dataset.fbdel); renderFeedback(); }
+    });
+    return;
+  }
+  if (fbSent) {
+    P.innerHTML = `<div class="tm-body" style="padding:26px 18px;text-align:center"><div style="font-size:34px">💚</div><div class="tm-title" style="margin-top:6px">Thank you!</div><div class="tm-sub" style="margin-top:4px">Your feedback was sent${fbAnon ? ' anonymously' : ''}.</div><button class="btn" id="fb-again" style="margin-top:14px">Write another</button></div>`;
+    P.querySelector('#fb-again').onclick = () => { fbSent = false; renderFeedback(); };
+    return;
+  }
+  const draft = P.querySelector('#fb-text')?.value || '';
+  P.innerHTML = `<div class="tm-head"><div class="tm-title">💬 Send feedback</div><div class="tm-sub" style="margin-top:3px">About the admin, the office, or an idea. Only the admin reads it.</div></div>
+    <div class="tm-body" style="padding:12px 14px 14px">
+      <textarea id="fb-text" class="mc-area" rows="5" maxlength="2000" dir="auto" placeholder="Write your feedback..."></textarea>
+      <label class="fb-tog"><input type="checkbox" id="fb-anon" ${fbAnon ? 'checked' : ''}><span class="fb-sw"><i></i></span><span>${fbIcon} Send anonymously</span></label>
+      <div class="tm-sub fb-note" style="${fbAnon ? '' : 'visibility:hidden'}">Your name is not saved with this message</div>
+      <div id="fb-err" class="br-err" style="min-height:14px">${esc(fbErr)}</div>
+      <div style="display:flex;justify-content:flex-end"><button class="btn btn-pri" id="fb-send" style="padding:7px 18px">Send</button></div>
+    </div>`;
+  const ta = P.querySelector('#fb-text'); ta.value = draft;
+  P.querySelector('#fb-anon').onchange = e => { fbAnon = e.target.checked; P.querySelector('.fb-note').style.visibility = fbAnon ? '' : 'hidden'; };
+  P.querySelector('#fb-send').onclick = async () => {
+    const body = ta.value.trim();
+    if (!body) { P.querySelector('#fb-err').textContent = 'Write something first'; ta.focus(); return; }
+    const b = P.querySelector('#fb-send'); b.disabled = true; b.textContent = 'Sending...';
+    const { error } = await sb.rpc('send_feedback', { p_body: body, p_anonymous: fbAnon });
+    if (error) { fbErr = 'Not sent: ' + error.message; renderFeedback(); fbErr = ''; return; }
+    ta.value = ''; fbSent = true; renderFeedback();
+  };
+}
+function startFeedback() {
+  if (!ME || document.getElementById('fb-btn')) return;
+  const btn = topButton('fb-btn', '💬 <span id="fb-count" class="mc-badge" style="display:none;background:#378ADD">0</span>', ME.admin ? 'Feedback from the team' : 'Send feedback');
+  fbPanel = makePanel('fb-panel', btn);
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    if (fbPanel.panel.classList.contains('open')) { fbPanel.panel.classList.remove('open'); return; }
+    fbPanel.open(); renderFeedback();
+    if (ME.admin) {
+      await loadFeedback();
+      if (fbList && fbList.some(f => !f.seen)) {   // opening the list = read
+        await sb.from('feedback').update({ seen: true }).eq('seen', false);
+        setTimeout(() => { fbList.forEach(f => f.seen = true); renderFeedback(); }, 2500);   // keep the blue dots a moment
+      }
+    } else setTimeout(() => fbPanel.panel.querySelector('#fb-text')?.focus(), 50);
+  });
+  if (ME.admin) {
+    loadFeedback();
+    sb.channel('feedback-live').on('postgres_changes', { event: '*', schema: 'public', table: 'feedback' }, debounce(loadFeedback, 300)).subscribe(() => {});
+  }
+}
+
 function askForKey(errorText) {
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;inset:0;z-index:200;display:grid;place-items:center;background:#0009;padding:16px';
@@ -2062,6 +2163,7 @@ async function start() {
   startMessages();
   startTargetHistory();
   startBreaks();
+  startFeedback();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
