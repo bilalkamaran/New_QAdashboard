@@ -131,7 +131,47 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .th-leg i{display:inline-block;width:9px;height:9px;border-radius:3px;margin-right:4px;vertical-align:-1px}
 
 @media(max-width:640px){.th-lbl{display:none}}
-@media(max-width:520px){#tm-panel,.gpanel{left:12px!important;right:12px!important;width:auto}}
+@media(max-width:520px){.me-name{display:none}.frow{gap:6px!important}.frow>.btn{padding-left:10px;padding-right:10px}}
+@media(max-width:520px){#tm-panel,.gpanel,#br-panel{left:12px!important;right:12px!important;width:auto}}
+
+/* BREAKS (☕ panel) */
+#br-panel{width:420px}
+.br-chip{font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--glass-line);color:var(--mute);white-space:nowrap}
+.br-chip.me{background:var(--grad);color:#fff;box-shadow:none}
+.br-now{display:flex;justify-content:space-between;gap:8px;padding:8px 10px;border-radius:12px;background:rgba(29,158,117,.12);color:#0f7a59;font-size:12px;font-weight:700;margin-bottom:5px}
+.dark .br-now{color:#5DCAA5}
+.br-slot{padding:9px 6px;border-top:1px solid var(--line)}
+.br-slot.done{opacity:.5}
+.br-slot.live{background:rgba(29,158,117,.06);border-radius:12px}
+.br-top{display:flex;align-items:center;gap:8px}
+.br-time{font-size:13px;font-weight:800;width:104px;flex-shrink:0}
+.br-mid{flex:1}
+.br-tag{font-size:10.5px;font-weight:800;padding:3px 8px;border-radius:99px}
+.br-tag.free{background:rgba(29,158,117,.14);color:#0f7a59}
+.br-tag.half{background:rgba(245,158,11,.16);color:#b45309}
+.br-tag.full{background:rgba(225,29,72,.12);color:#be123c}
+.dark .br-tag.free{color:#5DCAA5}.dark .br-tag.half{color:#fbbf24}.dark .br-tag.full{color:#fb7185}
+.br-book{padding:5px 12px;font-size:11.5px}
+.br-g{display:flex;align-items:center;gap:6px;margin:6px 0 0 112px;font-size:12px}
+.br-g.muted{color:var(--mute);font-weight:600}
+.br-grp{padding:3px 9px;border-radius:99px;background:rgba(225,29,72,.1);color:#be123c;font-weight:700}
+.dark .br-grp{color:#fb7185}
+.br-by{font-size:10.5px;color:var(--mute);font-weight:600}
+.br-x,.br-del{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;color:#e11d48;font-size:11px;font-weight:800;flex-shrink:0}
+.br-x:hover,.br-del:hover{background:rgba(225,29,72,.1)}
+.br-x.sure,.br-del.sure{background:#e11d48;color:#fff}
+.br-pick{margin:8px 0 0 0;padding:10px;border-radius:12px;background:rgba(127,127,127,.08)}
+.br-names{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.br-name{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--glass-line);color:var(--ink)}
+button.br-name:hover{box-shadow:inset 0 0 0 1px var(--acc)}
+.br-name.on{background:var(--grad);color:#fff;box-shadow:none}
+.br-name.lock{opacity:.85}
+.br-err{margin-top:8px;font-size:11.5px;font-weight:700;color:#e11d48}
+.br-add{display:flex;gap:8px;align-items:flex-end}
+.br-add label{flex:1;display:flex;flex-direction:column;gap:3px;font-size:10px;font-weight:700;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.br-add input{font-size:12.5px;font-weight:600;padding:7px 9px;border-radius:10px;background:rgba(255,255,255,.6);box-shadow:inset 0 0 0 1px var(--glass-line);outline:none;color:var(--ink)}
+.dark .br-add input{background:rgba(255,255,255,.05);color-scheme:dark}
+@media(max-width:520px){.br-g{margin-left:0}.br-time{width:96px}}
 
 /* ADMIN MESSAGES (📢 ticker) */
 #msg-ticker{border-radius:16px;overflow:hidden}
@@ -561,7 +601,7 @@ function applyRole() {
   const pill = document.createElement('span');
   pill.className = 'chip';
   pill.style.cssText = 'gap:8px;padding:6px 6px 6px 12px';
-  pill.innerHTML = `👤 ${esc(ME.name)}${ME.admin ? ' · admin' : ''} <button class="mini" id="signout-btn">Sign out</button>`;
+  pill.innerHTML = `👤 <span class="me-name">${esc(ME.name)}${ME.admin ? ' · admin' : ''}</span> <button class="mini" id="signout-btn">Sign out</button>`;
   const exportBtn = document.getElementById('export-btn');
   exportBtn.parentElement.insertBefore(pill, exportBtn.parentElement.firstChild);
   pill.querySelector('#signout-btn').onclick = signOut;
@@ -930,6 +970,154 @@ function startMessages() {
     .subscribe(() => {});
   setInterval(() => { renderTicker(); if (msgPanel && msgPanel.panel.classList.contains('open')) renderMsgPanel(); }, 60000);   // expired messages disappear
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadMessages(); });
+}
+
+/* ---------- ☕ Breaks: admin sets the times, everybody books for a group of 1-4 (2 groups per time) ---------- */
+let brSlots = [], brBookings = [], brMembers = [], brNames = [], brPanel = null, brPick = null, brPicked = [], brErr = '';
+const brToday = () => isoDay(Date.now());
+const brMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + m; };
+const brNowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60; };
+const brFmt = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(Math.round(m % 60)).padStart(2, '0');
+async function loadBreaks() {
+  const day = brToday();
+  const [a, b, c] = await Promise.all([
+    sb.from('break_slots').select('id,start_time,minutes').order('start_time'),
+    sb.from('break_bookings').select('id,slot_id,booked_by,created_at').eq('day', day).order('created_at'),
+    sb.from('break_members').select('booking_id,name').eq('day', day)
+  ]);
+  if (a.error) { brSlots = null; renderBreaks(); return; }   // step_breaks.sql not run yet
+  brSlots = a.data || []; brBookings = b.data || []; brMembers = c.data || [];
+  if (!brNames.length) {
+    const { data } = await sb.from('users').select('name').order('name');
+    brNames = (data || []).map(u => String(u.name).trim()).filter(Boolean);
+  }
+  renderBreaks();
+}
+function brState() {
+  const now = brNowMin(), mine = brMembers.find(m => m.name === ME.name);
+  const slots = (brSlots || []).map(s => {
+    const start = brMin(s.start_time), end = start + s.minutes;
+    const groups = brBookings.filter(b => b.slot_id === s.id).map(b => ({ ...b, names: brMembers.filter(m => m.booking_id === b.id).map(m => m.name) }));
+    return { ...s, start, end, groups, done: now >= end, live: now >= start && now < end, started: now >= start };
+  });
+  const myBooking = mine ? brBookings.find(b => b.id === mine.booking_id) : null;
+  const mySlot = myBooking ? slots.find(s => s.id === myBooking.slot_id) : null;
+  const onBreak = slots.filter(s => s.live).flatMap(s => s.groups.map(g => ({ names: g.names, end: s.end })));
+  const busy = new Set(brMembers.map(m => m.name));
+  return { slots, mySlot, onBreak, free: brNames.filter(n => !busy.has(n)) };
+}
+function renderBreaks() {
+  const st = brSlots ? brState() : null;
+  const badge = document.getElementById('br-now');
+  if (badge) { const n = st ? st.onBreak.reduce((a, g) => a + g.names.length, 0) : 0; badge.textContent = innerWidth < 520 ? n : n + ' now'; badge.style.display = n ? '' : 'none'; }
+  if (!brPanel || !brPanel.panel.classList.contains('open')) return;
+  const P = brPanel.panel;
+  if (!st) { P.innerHTML = '<div class="tm-head"><div class="tm-title">☕ Breaks today</div></div><div class="tm-empty" style="padding:16px">Run step_breaks.sql in Supabase to turn this on.</div>'; return; }
+  const name = n => esc(fmt(n));
+  const canBookAny = ME.admin || !st.mySlot;
+  const chipMine = st.mySlot ? `<span class="br-chip me">Your break: ${brFmt(st.mySlot.start)}</span>` : (ME.admin ? '<span class="br-chip me">Admin</span>' : '<span class="br-chip">No break yet</span>');
+  const now = brNowMin();
+  const onNow = st.onBreak.length
+    ? st.onBreak.map(g => `<div class="br-now"><span>${g.names.map(name).join(' · ')}</span><span>back in ${Math.max(1, Math.ceil(g.end - now))} min</span></div>`).join('')
+    : '<div class="tm-empty" style="padding:6px 4px">Nobody is on break right now</div>';
+  const rows = st.slots.map(s => {
+    const n = s.groups.length;
+    const tag = s.done ? '' : n >= 2 ? '<span class="br-tag full">Full</span>' : n === 1 ? '<span class="br-tag half">1 place free</span>' : '<span class="br-tag free">Free</span>';
+    const groups = s.done
+      ? (n ? `<div class="br-g muted">Done · ${s.groups.map(g => g.names.map(name).join(', ')).join(' · ')}</div>` : '<div class="br-g muted">Done</div>')
+      : s.groups.map(g => `<div class="br-g"><span class="br-grp">${g.names.map(name).join(', ')}</span><span class="br-by">by ${name(g.booked_by)}</span>${ME.admin ? `<button class="br-x" data-cancel="${g.id}" title="Cancel this break">✕</button>` : ''}</div>`).join('');
+    const book = (!s.started && n < 2 && canBookAny) ? `<button class="btn btn-pri br-book" data-book="${s.id}">Book</button>` : '';
+    const del = ME.admin ? `<button class="br-del" data-del="${s.id}" title="Delete this break time"><svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg></button>` : '';
+    let picker = '';
+    if (brPick === s.id) {
+      const max = 4, self = !ME.admin;
+      const pool = st.free.filter(x => x !== ME.name);
+      picker = `<div class="br-pick"><div class="tm-sub">${self ? 'You + up to 3 people' : 'Pick 1 to 4 people'} · ${brPicked.length + (self ? 1 : 0)} / ${max}</div>
+        <div class="br-names">${self ? `<span class="br-name on lock">${name(ME.name)} (you)</span>` : ''}${pool.map(x => `<button class="br-name ${brPicked.includes(x) ? 'on' : ''}" data-pick="${esc(x)}">${name(x)}</button>`).join('') || '<span class="tm-sub">Everybody else already has a break</span>'}</div>
+        ${brErr ? `<div class="br-err">${esc(brErr)}</div>` : ''}
+        <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px"><button class="btn" data-pickcancel="1">Cancel</button><button class="btn btn-pri" data-confirm="${s.id}">Book ${brFmt(s.start)}</button></div></div>`;
+    }
+    return `<div class="br-slot${s.done ? ' done' : ''}${s.live ? ' live' : ''}"><div class="br-top"><span class="br-time">${brFmt(s.start)} – ${brFmt(s.end)}</span><div class="br-mid">${tag}</div>${book}${del}</div>${groups}${picker}</div>`;
+  }).join('') || '<div class="tm-empty">No break times yet' + (ME.admin ? '. Add one below.' : '. The admin will add them.') + '</div>';
+  const admin = ME.admin ? `<div class="tm-sec" style="padding:14px 4px 6px">⚙️ Add a break time</div>
+    <div class="br-add"><label>Start<input type="time" id="br-start" step="300"></label><label>Minutes<input type="number" id="br-min" min="1" max="180" value="15"></label><button class="btn btn-pri" id="br-addbtn">Add</button></div>
+    ${!brPick && brErr ? `<div class="br-err">${esc(brErr)}</div>` : ''}` : '';
+  const scroll = P.querySelector('.tm-body')?.scrollTop || 0;
+  P.innerHTML = `<div class="tm-head"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><div class="tm-title">☕ Breaks today</div>${chipMine}</div></div>
+    <div class="tm-body" style="padding:8px 12px 14px">
+      <div class="tm-sec" style="padding:6px 4px"><span class="tm-dot" style="width:6px;height:6px"></span>On break now</div>${onNow}
+      <div class="tm-sec" style="padding:12px 4px 6px">Times</div>${rows}
+      <div class="tm-sec" style="padding:12px 4px 6px">No break yet · ${st.free.length}</div>
+      <div class="br-names">${st.free.map(x => `<span class="br-name">${name(x)}</span>`).join('') || '<span class="tm-sub">Everybody has a break today</span>'}</div>
+      ${admin}</div>`;
+  P.querySelector('.tm-body').scrollTop = scroll;
+  P.querySelectorAll('[data-book]').forEach(b => b.onclick = () => { brPick = +b.dataset.book; brPicked = []; brErr = ''; renderBreaks(); });
+  P.querySelectorAll('[data-pickcancel]').forEach(b => b.onclick = () => { brPick = null; brErr = ''; renderBreaks(); });
+  P.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+    const x = b.dataset.pick, lim = ME.admin ? 4 : 3;
+    if (brPicked.includes(x)) brPicked = brPicked.filter(y => y !== x);
+    else if (brPicked.length < lim) brPicked.push(x);
+    else { brErr = 'A group can have 4 people at most'; }
+    renderBreaks(); brErr = '';
+  });
+  P.querySelectorAll('[data-confirm]').forEach(b => b.onclick = async () => {
+    if (ME.admin && !brPicked.length) { brErr = 'Pick at least one person'; renderBreaks(); return; }
+    b.disabled = true; b.textContent = 'Booking...';
+    const { error } = await sb.rpc('book_break', { p_slot: +b.dataset.confirm, p_names: brPicked });
+    if (error) { brErr = error.message; renderBreaks(); return; }
+    brPick = null; brPicked = []; brErr = ''; await loadBreaks();
+  });
+  P.querySelectorAll('[data-cancel]').forEach(b => b.onclick = async () => {
+    if (!confirmTwice(b)) return;
+    const { error } = await sb.rpc('cancel_break', { p_booking: +b.dataset.cancel });
+    if (error) { brErr = error.message; renderBreaks(); return; }
+    await loadBreaks();
+  });
+  P.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    if (!confirmTwice(b)) return;
+    const { error } = await sb.from('break_slots').delete().eq('id', +b.dataset.del);
+    if (error) { brErr = error.message; renderBreaks(); return; }
+    await loadBreaks();
+  });
+  const add = P.querySelector('#br-addbtn');
+  if (add) add.onclick = async () => {
+    const t = P.querySelector('#br-start').value, m = +P.querySelector('#br-min').value;
+    if (!t) { brErr = 'Choose a start time'; renderBreaks(); return; }
+    if (!(m >= 1 && m <= 180)) { brErr = 'Minutes must be 1 to 180'; renderBreaks(); return; }
+    add.disabled = true;
+    const { error } = await sb.from('break_slots').insert({ start_time: t, minutes: m });
+    if (error) { brErr = /duplicate|unique/i.test(error.message) ? 'This start time already exists' : error.message; renderBreaks(); return; }
+    brErr = ''; await loadBreaks();
+  };
+}
+function confirmTwice(b) {   // first tap turns the button red, second tap does it (no browser pop-ups)
+  if (b.dataset.sure) return true;
+  b.dataset.sure = '1'; b.classList.add('sure'); b.title = 'Tap again to confirm';
+  setTimeout(() => { delete b.dataset.sure; b.classList.remove('sure'); }, 3000);
+  return false;
+}
+function startBreaks() {
+  if (!ME || document.getElementById('br-btn')) return;
+  const btn = topButton('br-btn', '☕ <span class="th-lbl">Breaks</span> <span id="br-now" class="mc-badge" style="display:none;background:#1D9E75">0 now</span>', 'Breaks today');
+  brPanel = makePanel('br-panel', btn);
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (brPanel.panel.classList.contains('open')) { brPanel.panel.classList.remove('open'); return; }
+    brPick = null; brErr = ''; brPanel.open(); renderBreaks(); loadBreaks();
+  });
+  loadBreaks();
+  const reload = debounce(loadBreaks, 300);
+  sb.channel('breaks-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'break_slots' }, reload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'break_bookings' }, reload)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'break_members' }, reload)
+    .subscribe(() => {});
+  let lastDay = brToday();
+  setInterval(() => {   // "on break now" / "back in X min" stay correct, new day = fresh bookings
+    if (brToday() !== lastDay) { lastDay = brToday(); loadBreaks(); return; }
+    if (!brPick) renderBreaks();
+  }, 30000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBreaks(); });
 }
 
 function askForKey(errorText) {
@@ -1873,6 +2061,7 @@ async function start() {
   startRank();
   startMessages();
   startTargetHistory();
+  startBreaks();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
