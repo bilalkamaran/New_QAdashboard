@@ -1065,7 +1065,10 @@ function renderBreaksCard() {
     const n = s.groups.length;
     const tag = s.done ? '<span class="sub">Done</span>' : n >= 2 ? '<span class="chip chip-red" style="padding:5px 13px;font-size:11.5px">Full</span>' : n === 1 ? '<span class="chip" style="padding:5px 13px;font-size:11.5px">1 place free</span>' : '<span class="chip" style="padding:5px 13px;font-size:11.5px">Free</span>';
     const groupsHtml = n
-      ? s.groups.map(g => `<span class="chip" style="margin:3px 5px 3px 0;padding:5px 13px;font-size:11.5px">${g.names.map(name).join(', ')}</span>`).join('')
+      ? s.groups.map(g => `<span style="display:inline-flex;align-items:baseline;gap:6px;margin:3px 5px 3px 0">
+          <span class="chip" style="padding:5px 13px;font-size:11.5px">${g.names.map(name).join(', ')}</span>
+          <span class="sub" style="font-size:10px">booked by ${name(g.booked_by)}</span>
+        </span>`).join('')
       : '<span class="sub">No one booked yet</span>';
     const cancelBtns = ME.admin && n ? s.groups.map(g => `<button class="btn" data-cancel="${g.id}" style="font-size:10.5px;padding:5px 11px;margin:3px 5px 0 0;color:#e11d48;border-radius:11px" title="Cancel this group">✕ ${name(g.booked_by)}'s group</button>`).join('') : '';
     const book = (!s.started && n < 2 && canBookAny) ? `<button class="btn btn-pri" data-book="${s.id}" style="padding:8px 16px;font-size:12px;border-radius:13px">Book</button>` : '';
@@ -1144,7 +1147,7 @@ function openBreakEdit(slotId) {
       <label class="flex flex-col gap-1.5 text-[10.5px] font-bold uppercase tracking-wide sub">Start<input type="time" id="be-start" step="300" value="${brFmt(s.start)}" class="ctl" style="font-size:14px;padding:11px 15px;border-radius:16px"></label>
       <label class="flex flex-col gap-1.5 text-[10.5px] font-bold uppercase tracking-wide sub">Minutes<input type="number" id="be-min" min="1" max="180" value="${s.minutes}" class="ctl" style="width:92px;font-size:14px;padding:11px 15px;border-radius:16px"></label>
     </div>
-    <div class="sub" style="margin-bottom:8px;font-size:12px">People in this group</div>
+    <div class="sub" style="margin-bottom:8px;font-size:12px">People in this group${g ? ' (deselect everyone to cancel this group)' : ' (optional -- leave empty to just change the time)'}</div>
     <div id="be-names" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px"></div>
     <div id="be-err" class="sub" style="color:#e11d48;min-height:16px"></div>
     <div style="display:flex;gap:10px;justify-content:space-between;align-items:center;margin-top:16px;flex-wrap:wrap">
@@ -1181,7 +1184,6 @@ function openBreakEdit(slotId) {
     const t = box.querySelector('#be-start').value, m = +box.querySelector('#be-min').value, errEl = box.querySelector('#be-err');
     if (!t) { errEl.innerText = 'Choose a start time'; return; }
     if (!(m >= 1 && m <= 180)) { errEl.innerText = 'Minutes must be 1 to 180'; return; }
-    if (!picked.size) { errEl.innerText = 'Pick at least one person'; return; }
     const btn = box.querySelector('#be-save'); btn.disabled = true; btn.textContent = 'Saving...';
     const delta = brMin(t) - s.start;
     try {
@@ -1198,9 +1200,12 @@ function openBreakEdit(slotId) {
         if (error) throw error;
       }
       if (g) {
-        const { error: delErr } = await sb.from('break_members').delete().eq('booking_id', g.id);
-        if (delErr) throw delErr;
-        if (picked.size) {
+        if (!picked.size) {
+          const { error: cancelErr } = await sb.rpc('cancel_break', { p_booking: g.id });
+          if (cancelErr) throw cancelErr;
+        } else {
+          const { error: delErr } = await sb.from('break_members').delete().eq('booking_id', g.id);
+          if (delErr) throw delErr;
           const rows = [...picked].map(n => ({ booking_id: g.id, name: n, day: brToday() }));
           const { error: insErr } = await sb.from('break_members').insert(rows);
           if (insErr) throw insErr;
