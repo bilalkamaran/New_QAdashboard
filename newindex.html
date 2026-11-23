@@ -1205,6 +1205,9 @@ function openBreakEdit(slotId) {
           const { error: insErr } = await sb.from('break_members').insert(rows);
           if (insErr) throw insErr;
         }
+      } else if (picked.size) {
+        const { error: bookErr } = await sb.rpc('book_break', { p_slot: s.id, p_names: [...picked] });
+        if (bookErr) throw bookErr;
       }
       closeBreakModal();
       await loadBreaks();
