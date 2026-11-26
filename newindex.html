@@ -1350,14 +1350,19 @@ async function markChatRead() {
   chatReads[ME.name] = maxId;
   try { await sb.from('chat_reads').upsert({ name: ME.name, last_read_id: maxId, updated_at: new Date().toISOString() }, { onConflict: 'name' }); } catch (e) {}
 }
-async function chatToggleReaction(messageId, emoji) {
-  const mine = (chatReactions[messageId] || []).find(r => r.name === ME.name);
-  if (mine && mine.emoji === emoji) {
-    await sb.from('chat_reactions').delete().eq('message_id', messageId).eq('name', ME.name);
-  } else {
-    await sb.from('chat_reactions').upsert({ message_id: messageId, name: ME.name, emoji }, { onConflict: 'message_id,name' });
-  }
+function chatToggleReaction(messageId, emoji) {
+  const arr = chatReactions[messageId] || [];
+  const mineIdx = arr.findIndex(r => r.name === ME.name);
+  const removing = mineIdx > -1 && arr[mineIdx].emoji === emoji;
+  if (mineIdx > -1) arr.splice(mineIdx, 1);
+  if (!removing) arr.push({ message_id: messageId, name: ME.name, emoji });
+  chatReactions[messageId] = arr;
   chatOpenReact = null;
+  renderChatBody();   // close the picker and show the new reaction instantly, like Messenger
+  (async () => {
+    if (removing) await sb.from('chat_reactions').delete().eq('message_id', messageId).eq('name', ME.name);
+    else await sb.from('chat_reactions').upsert({ message_id: messageId, name: ME.name, emoji }, { onConflict: 'message_id,name' });
+  })();
 }
 function renderChatBody() {
   const box = $('chat-body'), onlineLine = $('chat-online-line');
@@ -1414,14 +1419,12 @@ function renderChatBody() {
     chatOpenReact = chatOpenReact === +el.dataset.reactopen ? null : +el.dataset.reactopen;
     renderChatBody();
   });
-  box.querySelectorAll('[data-react]').forEach(el => el.onclick = async () => {
+  box.querySelectorAll('[data-react]').forEach(el => el.onclick = () => {
     const [id, emoji] = el.dataset.react.split('|');
-    await chatToggleReaction(+id, emoji);
-    await loadChat();
+    chatToggleReaction(+id, emoji);
   });
-  box.querySelectorAll('[data-reactchip]').forEach(el => el.onclick = async () => {
-    await chatToggleReaction(+el.dataset.reactchip, el.dataset.emoji);
-    await loadChat();
+  box.querySelectorAll('[data-reactchip]').forEach(el => el.onclick = () => {
+    chatToggleReaction(+el.dataset.reactchip, el.dataset.emoji);
   });
   box.querySelectorAll('[data-chatdel]').forEach(b => b.onclick = async () => {
     if (!confirmTwice(b)) return;
@@ -1517,6 +1520,14 @@ function buildChatPanel(btn) {
     emojiBtn.parentElement.appendChild(mentionPop);
   });
   document.addEventListener('click', closeMentionPop);
+  // clicking anywhere else INSIDE the chat panel closes an open reaction picker, like Messenger.
+  // (the panel itself stops clicks from reaching document, so this has to listen on the panel.)
+  chatPanel.panel.addEventListener('click', e => {
+    if (chatOpenReact === null) return;
+    if (e.target.closest('[data-reactpicker]') || e.target.closest('[data-reactopen]')) return;
+    chatOpenReact = null;
+    renderChatBody();
+  });
   const doSend = async () => {
     const body = textInp.value.trim();
     if (!body && !chatPendingImg) return;
@@ -1546,7 +1557,7 @@ function startChat() {
   buildChatPanel(btn);
   btn.addEventListener('click', e => {
     e.stopPropagation();
-    if (chatPanel.panel.classList.contains('open')) { chatPanel.panel.classList.remove('open'); return; }
+    if (chatPanel.panel.classList.contains('open')) { chatPanel.panel.classList.remove('open'); chatOpenReact = null; return; }
     chatPanel.open(); renderChatBody(); markChatRead();
     if (chatList && chatList.length) {
       chatLastSeen = chatList[chatList.length - 1].id;
