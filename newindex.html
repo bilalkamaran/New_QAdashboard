@@ -1301,6 +1301,8 @@ function startBreaks() {
 
 /* ---------- 👥 Group chat: a Messenger-style popup from the top bar; everyone posts under their own name, admin only can delete ---------- */
 let chatList = null, chatPanel = null, chatReplyTo = null, chatPendingImg = null, chatLastSeen = 0;
+let chatReactions = {}, chatReads = {}, chatOpenReact = null;
+const REACT_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 try { chatLastSeen = +(localStorage.getItem('qa-chat-seen') || 0); } catch (e) {}
 function chatWhen(t) {
   const d = new Date(t), today = new Date(), y = new Date(Date.now() - DAY);
@@ -1310,17 +1312,52 @@ function chatWhen(t) {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + hm;
 }
 function chatImgUrl(path) { return sb.storage.from('chat-images').getPublicUrl(path).data.publicUrl; }
+const chatEscRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+function chatMentionify(bodyEsc) {
+  if (!brNames || !brNames.length) return bodyEsc;
+  const names = [...brNames].sort((a, b) => b.length - a.length);
+  const re = new RegExp('@(' + names.map(chatEscRe).join('|') + ')(?!\\w)', 'gi');
+  return bodyEsc.replace(re, whole => {
+    const isMe = whole.slice(1).toLowerCase() === (ME.name || '').toLowerCase();
+    return `<b style="color:var(--acc);background:${isMe ? 'rgba(13,148,136,.18)' : 'transparent'};border-radius:5px;padding:0 2px">${whole}</b>`;
+  });
+}
 async function loadChat() {
   const { data, error } = await sb.from('chat_messages').select('id,sender,body,image_path,reply_to,created_at').order('id', { ascending: true }).limit(300);
   chatList = error ? null : (data || []);
+  const ids = chatList ? chatList.map(m => m.id) : [];
+  const [reactRes, readRes] = await Promise.all([
+    ids.length ? sb.from('chat_reactions').select('message_id,name,emoji').in('message_id', ids) : { data: [] },
+    sb.from('chat_reads').select('name,last_read_id')
+  ]);
+  chatReactions = {};
+  (reactRes.data || []).forEach(r => { (chatReactions[r.message_id] = chatReactions[r.message_id] || []).push(r); });
+  chatReads = {};
+  (readRes.data || []).forEach(r => { chatReads[r.name] = r.last_read_id; });
   renderChatBadge();
-  if (chatPanel && chatPanel.panel.classList.contains('open')) renderChatBody();
+  if (chatPanel && chatPanel.panel.classList.contains('open')) { renderChatBody(); markChatRead(); }
 }
 function renderChatBadge() {
   const badge = $('chat-count');
   if (!badge) return;
   const n = chatList ? chatList.filter(m => m.id > chatLastSeen && m.sender !== ME.name).length : 0;
   badge.textContent = n; badge.style.display = n ? '' : 'none';
+}
+async function markChatRead() {
+  if (!chatList || !chatList.length) return;
+  const maxId = chatList[chatList.length - 1].id;
+  if ((chatReads[ME.name] || 0) >= maxId) return;
+  chatReads[ME.name] = maxId;
+  try { await sb.from('chat_reads').upsert({ name: ME.name, last_read_id: maxId, updated_at: new Date().toISOString() }, { onConflict: 'name' }); } catch (e) {}
+}
+async function chatToggleReaction(messageId, emoji) {
+  const mine = (chatReactions[messageId] || []).find(r => r.name === ME.name);
+  if (mine && mine.emoji === emoji) {
+    await sb.from('chat_reactions').delete().eq('message_id', messageId).eq('name', ME.name);
+  } else {
+    await sb.from('chat_reactions').upsert({ message_id: messageId, name: ME.name, emoji }, { onConflict: 'message_id,name' });
+  }
+  chatOpenReact = null;
 }
 function renderChatBody() {
   const box = $('chat-body'), onlineLine = $('chat-online-line');
@@ -1329,20 +1366,41 @@ function renderChatBody() {
   if (!chatList) { box.innerHTML = '<div class="tm-empty">Run step_chat.sql in Supabase to turn this on.</div>'; return; }
   const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
   const byId = new Map(chatList.map(m => [m.id, m]));
+  const lastId = chatList.length ? chatList[chatList.length - 1].id : null;
   box.innerHTML = chatList.map(m => {
     const parent = m.reply_to ? byId.get(m.reply_to) : null;
     const replyHtml = parent
       ? `<div style="font-size:10px;color:var(--mute);background:rgba(127,140,160,.1);border-left:3px solid var(--acc);padding:3px 9px;border-radius:8px;margin-bottom:4px">↩ ${esc(fmt(parent.sender))}: "${esc((parent.body || (parent.image_path ? 'photo' : '')).slice(0, 50))}"</div>`
       : (m.reply_to ? `<div style="font-size:10px;color:var(--mute);margin-bottom:4px">↩ replying to a deleted message</div>` : '');
-    const bodyHtml = m.body ? `<div style="font-size:12.5px;color:var(--ink);background:rgba(127,140,160,.08);padding:7px 12px;border-radius:14px;display:inline-block;white-space:pre-wrap;word-break:break-word" dir="auto">${esc(m.body)}</div>` : '';
+    const mentionsMe = m.body && new RegExp('@' + chatEscRe(ME.name) + '(?!\\w)', 'i').test(m.body);
+    const bodyHtml = m.body ? `<div style="font-size:12.5px;color:var(--ink);background:rgba(127,140,160,.08);padding:7px 12px;border-radius:14px;display:inline-block;white-space:pre-wrap;word-break:break-word;${mentionsMe ? 'box-shadow:inset 0 0 0 1.5px rgba(13,148,136,.45)' : ''}" dir="auto">${chatMentionify(esc(m.body))}</div>` : '';
     const imgHtml = m.image_path ? `<div style="margin-top:${m.body ? '5px' : '0'}"><img src="${esc(chatImgUrl(m.image_path))}" loading="lazy" style="max-width:190px;max-height:190px;border-radius:11px;cursor:pointer;display:block" onclick="window.open('${esc(chatImgUrl(m.image_path))}','_blank')"></div>` : '';
     const online = onlineNow.has(m.sender);
+    // reactions: group this message's reaction rows by emoji
+    const myReaction = (chatReactions[m.id] || []).find(r => r.name === ME.name);
+    const groups = {};
+    (chatReactions[m.id] || []).forEach(r => { (groups[r.emoji] = groups[r.emoji] || []).push(r.name); });
+    const chipsHtml = Object.keys(groups).length
+      ? `<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:3px">${Object.entries(groups).map(([em, names]) =>
+          `<span data-reactchip="${m.id}" data-emoji="${em}" title="${esc(names.map(fmt).join(', '))}" style="cursor:pointer;font-size:10.5px;font-weight:700;background:${names.includes(ME.name) ? 'rgba(13,148,136,.16)' : 'rgba(127,140,160,.1)'};border-radius:99px;padding:1px 7px;display:inline-flex;align-items:center;gap:3px">${em} ${names.length}</span>`
+        ).join('')}</div>`
+      : '';
+    const reactPicker = chatOpenReact === m.id
+      ? `<div style="display:flex;gap:3px;margin-top:3px;background:var(--glass-strong,rgba(255,255,255,.95));border-radius:12px;padding:4px 6px;box-shadow:0 10px 24px -10px rgba(31,38,135,.3);width:fit-content" data-reactpicker="${m.id}">${REACT_EMOJIS.map(em => `<span data-react="${m.id}|${em}" style="cursor:pointer;font-size:15px;padding:1px 2px;border-radius:7px;${myReaction && myReaction.emoji === em ? 'background:rgba(13,148,136,.2)' : ''}">${em}</span>`).join('')}</div>`
+      : '';
+    const seenHtml = (m.id === lastId)
+      ? (() => {
+          const seenBy = Object.keys(chatReads).filter(n => n !== m.sender && n !== ME.name && chatReads[n] >= m.id);
+          return seenBy.length ? `<div class="sub" style="font-size:9.5px;margin-top:3px">Seen by ${esc(seenBy.map(fmt).join(', '))}</div>` : '';
+        })()
+      : '';
     return `<div style="display:flex;gap:9px;align-items:flex-start" data-msg="${m.id}">
       <div style="position:relative;flex-shrink:0"><div class="av" style="width:32px;height:32px;border-radius:11px;font-size:11px;background:${avatarColor(m.sender)}">${initials(fmt(m.sender))}</div>${online ? '<i style="position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;background:#22c55e;border:2px solid var(--bg)"></i>' : ''}</div>
       <div class="flex-1 min-w-0">
         <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:2px">${esc(fmt(m.sender))} <span class="sub" style="font-size:10px">${chatWhen(m.created_at)}</span></div>
-        ${replyHtml}${bodyHtml}${imgHtml}
-        <div style="margin-top:2px"><span data-reply="${m.id}" style="font-size:9.5px;font-weight:700;color:var(--acc);cursor:pointer">↩ Reply</span></div>
+        ${replyHtml}${bodyHtml}${imgHtml}${chipsHtml}${reactPicker}
+        <div style="margin-top:2px;display:flex;gap:10px"><span data-reply="${m.id}" style="font-size:9.5px;font-weight:700;color:var(--acc);cursor:pointer">↩ Reply</span><span data-reactopen="${m.id}" style="font-size:9.5px;font-weight:700;color:var(--acc);cursor:pointer">😊 React</span></div>
+        ${seenHtml}
       </div>
       ${ME.admin ? `<button class="btn" data-chatdel="${m.id}" style="width:22px;height:22px;padding:0;border-radius:7px;font-size:10px;color:#e11d48;flex-shrink:0" title="Delete this message">✕</button>` : ''}
     </div>`;
@@ -1351,6 +1409,19 @@ function renderChatBody() {
     const m = byId.get(+el.dataset.reply);
     if (!m) return;
     chatReplyTo = m; renderChatReplyBar(); $('chat-text').focus();
+  });
+  box.querySelectorAll('[data-reactopen]').forEach(el => el.onclick = () => {
+    chatOpenReact = chatOpenReact === +el.dataset.reactopen ? null : +el.dataset.reactopen;
+    renderChatBody();
+  });
+  box.querySelectorAll('[data-react]').forEach(el => el.onclick = async () => {
+    const [id, emoji] = el.dataset.react.split('|');
+    await chatToggleReaction(+id, emoji);
+    await loadChat();
+  });
+  box.querySelectorAll('[data-reactchip]').forEach(el => el.onclick = async () => {
+    await chatToggleReaction(+el.dataset.reactchip, el.dataset.emoji);
+    await loadChat();
   });
   box.querySelectorAll('[data-chatdel]').forEach(b => b.onclick = async () => {
     if (!confirmTwice(b)) return;
@@ -1385,16 +1456,67 @@ function buildChatPanel(btn) {
     <div class="tm-body" id="chat-body" style="flex:1;display:flex;flex-direction:column;gap:13px"></div>
     <div id="chat-reply-bar" class="hidden" style="margin:0 14px 8px;padding:6px 11px;border-radius:9px;background:rgba(127,140,160,.1);border-left:3px solid var(--acc);font-size:10.5px;color:var(--mute);display:flex;align-items:center;justify-content:space-between;gap:10px"></div>
     <div id="chat-img-preview" class="hidden" style="margin:0 14px 8px;display:flex;align-items:center;gap:9px"></div>
-    <div style="padding:10px 12px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px">
+    <div style="padding:10px 12px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px;position:relative">
       <input type="file" id="chat-file" accept="image/*" style="display:none">
       <button class="btn" id="chat-attach" style="width:30px;height:30px;padding:0;border-radius:10px;font-size:14px;flex-shrink:0" title="Attach an image">+</button>
+      <button class="btn" id="chat-emoji" style="width:30px;height:30px;padding:0;border-radius:10px;font-size:15px;flex-shrink:0" title="Emoji">😊</button>
       <input id="chat-text" class="ctl" style="flex:1;font-size:12px;padding:7px 12px;border-radius:12px" placeholder="Write a message..." maxlength="2000">
       <button class="btn btn-pri" id="chat-send" style="padding:7px 14px;font-size:11px;border-radius:12px;flex-shrink:0">Send</button>
     </div>
     <div id="chat-err" class="sub" style="padding:0 14px 8px;color:#e11d48"></div>`;
-  const attachBtn = $('chat-attach'), fileInp = $('chat-file'), textInp = $('chat-text'), sendBtn = $('chat-send'), errEl = $('chat-err');
+  const attachBtn = $('chat-attach'), fileInp = $('chat-file'), textInp = $('chat-text'), sendBtn = $('chat-send'), errEl = $('chat-err'), emojiBtn = $('chat-emoji');
   attachBtn.onclick = () => fileInp.click();
   fileInp.onchange = () => { chatPendingImg = fileInp.files[0] || null; renderChatImgPreview(); };
+  const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','🙂','😉','😍','😘','😎','🤔','😅','🙄','😴','😮','😢','😭','😡','🤬','😱','🥳','😇','🤗','🤝','👍','👎','🙏','🙌','👏','💪','✌️','👋','🔥','🎉','❤️','💔','💯','☕','😷','🤒','⏰','📌','✅','❌','❓','❗'];
+  let emojiPop = null, mentionPop = null;
+  const closeEmojiPop = () => { if (emojiPop) { emojiPop.remove(); emojiPop = null; } };
+  const closeMentionPop = () => { if (mentionPop) { mentionPop.remove(); mentionPop = null; } };
+  emojiBtn.onclick = e => {
+    e.stopPropagation();
+    closeMentionPop();
+    if (emojiPop) { closeEmojiPop(); return; }
+    emojiPop = document.createElement('div');
+    emojiPop.style.cssText = 'position:absolute;bottom:46px;left:12px;right:12px;background:var(--glass-strong,rgba(255,255,255,.96));backdrop-filter:blur(22px) saturate(180%);border:1px solid rgba(255,255,255,.85);border-radius:16px;box-shadow:0 20px 40px -14px rgba(31,38,135,.35);padding:10px;display:grid;grid-template-columns:repeat(6,1fr);gap:6px;z-index:70';
+    emojiPop.innerHTML = CHAT_EMOJIS.map(em => `<span style="cursor:pointer;font-size:19px;text-align:center;padding:5px 0;border-radius:9px;line-height:1" data-e="${em}">${em}</span>`).join('');
+    emojiPop.addEventListener('click', ev => {
+      ev.stopPropagation();
+      const span = ev.target.closest('[data-e]');
+      if (!span) return;
+      const start = textInp.selectionStart ?? textInp.value.length, end = textInp.selectionEnd ?? textInp.value.length;
+      textInp.value = textInp.value.slice(0, start) + span.dataset.e + textInp.value.slice(end);
+      const pos = start + span.dataset.e.length;
+      textInp.focus(); textInp.setSelectionRange(pos, pos);
+    });
+    emojiBtn.parentElement.appendChild(emojiPop);
+  };
+  document.addEventListener('click', closeEmojiPop);
+  // @mention autocomplete, from the same team roster Breaks uses (brNames)
+  textInp.addEventListener('input', () => {
+    closeEmojiPop();
+    const val = textInp.value, pos = textInp.selectionStart;
+    const m = val.slice(0, pos).match(/@([\p{L}\p{M} ]{0,24})$/u);
+    closeMentionPop();
+    if (!m) return;
+    const query = m[1].trim().toLowerCase();
+    const matches = (brNames || []).filter(n => n.toLowerCase().includes(query) && n !== ME.name).slice(0, 6);
+    if (!matches.length) return;
+    mentionPop = document.createElement('div');
+    mentionPop.style.cssText = 'position:absolute;bottom:46px;left:12px;right:12px;background:var(--glass-strong,rgba(255,255,255,.96));backdrop-filter:blur(22px) saturate(180%);border:1px solid rgba(255,255,255,.85);border-radius:14px;box-shadow:0 20px 40px -14px rgba(31,38,135,.35);padding:4px;max-height:170px;overflow-y:auto;z-index:71';
+    mentionPop.innerHTML = matches.map(n => `<div data-mention="${esc(n)}" style="padding:8px 11px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer">@${esc(fmt(n))}</div>`).join('');
+    mentionPop.addEventListener('mousedown', ev => {
+      ev.preventDefault();
+      const row = ev.target.closest('[data-mention]');
+      if (!row) return;
+      const before = val.slice(0, pos).replace(/@([\p{L}\p{M} ]{0,24})$/u, '@' + row.dataset.mention + ' ');
+      const after = val.slice(pos);
+      textInp.value = before + after;
+      const newPos = before.length;
+      textInp.focus(); textInp.setSelectionRange(newPos, newPos);
+      closeMentionPop();
+    });
+    emojiBtn.parentElement.appendChild(mentionPop);
+  });
+  document.addEventListener('click', closeMentionPop);
   const doSend = async () => {
     const body = textInp.value.trim();
     if (!body && !chatPendingImg) return;
@@ -1425,7 +1547,7 @@ function startChat() {
   btn.addEventListener('click', e => {
     e.stopPropagation();
     if (chatPanel.panel.classList.contains('open')) { chatPanel.panel.classList.remove('open'); return; }
-    chatPanel.open(); renderChatBody();
+    chatPanel.open(); renderChatBody(); markChatRead();
     if (chatList && chatList.length) {
       chatLastSeen = chatList[chatList.length - 1].id;
       try { localStorage.setItem('qa-chat-seen', chatLastSeen); } catch (e) {}
@@ -1434,7 +1556,11 @@ function startChat() {
     setTimeout(() => { const box = $('chat-body'); if (box) box.scrollTop = box.scrollHeight; }, 30);
   });
   loadChat();
-  sb.channel('chat-live').on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, debounce(loadChat, 300)).subscribe(() => {});
+  sb.channel('chat-live')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, debounce(loadChat, 300))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_reactions' }, debounce(loadChat, 300))
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_reads' }, debounce(loadChat, 300))
+    .subscribe(() => {});
 }
 
 /* ---------- 💬 Feedback: users write to the admin, with their name or anonymously ---------- */
