@@ -159,7 +159,7 @@ body::after{bottom:-26vmax;right:-14vmax;background:radial-gradient(circle,#4f46
 .br-by{font-size:10.5px;color:var(--mute);font-weight:600}
 .br-x,.br-del{width:24px;height:24px;border-radius:8px;display:grid;place-items:center;color:#e11d48;font-size:11px;font-weight:800;flex-shrink:0}
 .br-x:hover,.br-del:hover{background:rgba(225,29,72,.1)}
-.br-x.sure,.br-del.sure{background:#e11d48;color:#fff}
+.br-x.sure,.br-del.sure,.btn.sure{background:#e11d48;color:#fff}
 .br-pick{margin:8px 0 0 0;padding:10px;border-radius:12px;background:rgba(127,127,127,.08)}
 .br-names{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
 .br-name{font-size:11.5px;font-weight:700;padding:4px 10px;border-radius:99px;box-shadow:inset 0 0 0 1px var(--glass-line);color:var(--ink)}
@@ -424,6 +424,7 @@ body.loading .h-64 canvas{visibility:hidden}
   <div class="st side-foot flex items-center justify-between text-[11px] font-bold text-slate-400">
     <span class="flex items-center gap-2"><i class="live-dot"></i><span id="ptext">Starting...</span></span><span id="ppct" style="color:#2dd4bf">0%</span>
   </div>
+  <div id="sidebar-me" class="st" style="display:none;align-items:center;gap:8px;font-size:11.5px;font-weight:800;color:#e2e8f0;padding:2px 2px 4px"></div>
   <button id="sidebar-signout" class="mini" style="display:none;width:100%;text-align:center;margin-top:2px" title="Sign out">Sign out</button>
 </aside>
 
@@ -635,12 +636,8 @@ async function ensureLogin() {
 
 // what each person sees
 function applyRole() {
-  const pill = document.createElement('span');
-  pill.className = 'chip';
-  pill.style.cssText = 'gap:8px;padding:6px 12px';
-  pill.innerHTML = `👤 <span class="me-name">${esc(ME.name)}${ME.admin ? ' · admin' : ''}</span>`;
-  const exportBtn = document.getElementById('export-btn');
-  exportBtn.parentElement.insertBefore(pill, exportBtn.parentElement.firstChild);
+  const me = document.getElementById('sidebar-me');
+  if (me) { me.style.display = 'flex'; me.innerHTML = `👤 <span class="me-name">${esc(ME.name)}${ME.admin ? ' · admin' : ''}</span>`; }
   const so = document.getElementById('sidebar-signout');
   if (so) { so.style.display = ''; so.onclick = signOut; }
   if (ME.admin) return;
@@ -729,6 +726,7 @@ function startPresence() {
     onlineSince = {};
     Object.keys(st).forEach(k => { const ats = (st[k] || []).map(m => m.at).filter(Boolean); if (ats.length) onlineSince[k] = Math.min(...ats); });
     renderTeam();
+    if (chatPanel && chatPanel.panel.classList.contains('open')) renderChatBody();
   })
     .subscribe(async st => { if (st === 'SUBSCRIBED') { try { await presenceCh.track({ at: Date.now() }); } catch (e) {} } });
   const beat = () => { sb.rpc('touch_seen').then(() => {}, () => {}); };
@@ -1299,6 +1297,144 @@ function startBreaks() {
     if (!brPick) renderBreaksCard();
   }, 30000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadBreaks(); });
+}
+
+/* ---------- 👥 Group chat: a Messenger-style popup from the top bar; everyone posts under their own name, admin only can delete ---------- */
+let chatList = null, chatPanel = null, chatReplyTo = null, chatPendingImg = null, chatLastSeen = 0;
+try { chatLastSeen = +(localStorage.getItem('qa-chat-seen') || 0); } catch (e) {}
+function chatWhen(t) {
+  const d = new Date(t), today = new Date(), y = new Date(Date.now() - DAY);
+  const hm = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  if (d.toDateString() === today.toDateString()) return hm;
+  if (d.toDateString() === y.toDateString()) return 'Yesterday ' + hm;
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' ' + hm;
+}
+function chatImgUrl(path) { return sb.storage.from('chat-images').getPublicUrl(path).data.publicUrl; }
+async function loadChat() {
+  const { data, error } = await sb.from('chat_messages').select('id,sender,body,image_path,reply_to,created_at').order('id', { ascending: true }).limit(300);
+  chatList = error ? null : (data || []);
+  renderChatBadge();
+  if (chatPanel && chatPanel.panel.classList.contains('open')) renderChatBody();
+}
+function renderChatBadge() {
+  const badge = $('chat-count');
+  if (!badge) return;
+  const n = chatList ? chatList.filter(m => m.id > chatLastSeen && m.sender !== ME.name).length : 0;
+  badge.textContent = n; badge.style.display = n ? '' : 'none';
+}
+function renderChatBody() {
+  const box = $('chat-body'), onlineLine = $('chat-online-line');
+  if (!box) return;
+  if (onlineLine) onlineLine.textContent = onlineNow.size + (onlineNow.size === 1 ? ' person online now' : ' people online now');
+  if (!chatList) { box.innerHTML = '<div class="tm-empty">Run step_chat.sql in Supabase to turn this on.</div>'; return; }
+  const wasNearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
+  const byId = new Map(chatList.map(m => [m.id, m]));
+  box.innerHTML = chatList.map(m => {
+    const parent = m.reply_to ? byId.get(m.reply_to) : null;
+    const replyHtml = parent
+      ? `<div style="font-size:10px;color:var(--mute);background:rgba(127,140,160,.1);border-left:3px solid var(--acc);padding:3px 9px;border-radius:8px;margin-bottom:4px">↩ ${esc(fmt(parent.sender))}: "${esc((parent.body || (parent.image_path ? 'photo' : '')).slice(0, 50))}"</div>`
+      : (m.reply_to ? `<div style="font-size:10px;color:var(--mute);margin-bottom:4px">↩ replying to a deleted message</div>` : '');
+    const bodyHtml = m.body ? `<div style="font-size:12.5px;color:var(--ink);background:rgba(127,140,160,.08);padding:7px 12px;border-radius:14px;display:inline-block;white-space:pre-wrap;word-break:break-word" dir="auto">${esc(m.body)}</div>` : '';
+    const imgHtml = m.image_path ? `<div style="margin-top:${m.body ? '5px' : '0'}"><img src="${esc(chatImgUrl(m.image_path))}" loading="lazy" style="max-width:190px;max-height:190px;border-radius:11px;cursor:pointer;display:block" onclick="window.open('${esc(chatImgUrl(m.image_path))}','_blank')"></div>` : '';
+    const online = onlineNow.has(m.sender);
+    return `<div style="display:flex;gap:9px;align-items:flex-start" data-msg="${m.id}">
+      <div style="position:relative;flex-shrink:0"><div class="av" style="width:32px;height:32px;border-radius:11px;font-size:11px;background:${avatarColor(m.sender)}">${initials(fmt(m.sender))}</div>${online ? '<i style="position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;border-radius:50%;background:#22c55e;border:2px solid var(--bg)"></i>' : ''}</div>
+      <div class="flex-1 min-w-0">
+        <div style="font-size:11.5px;font-weight:700;color:var(--ink);margin-bottom:2px">${esc(fmt(m.sender))} <span class="sub" style="font-size:10px">${chatWhen(m.created_at)}</span></div>
+        ${replyHtml}${bodyHtml}${imgHtml}
+        <div style="margin-top:2px"><span data-reply="${m.id}" style="font-size:9.5px;font-weight:700;color:var(--acc);cursor:pointer">↩ Reply</span></div>
+      </div>
+      ${ME.admin ? `<button class="btn" data-chatdel="${m.id}" style="width:22px;height:22px;padding:0;border-radius:7px;font-size:10px;color:#e11d48;flex-shrink:0" title="Delete this message">✕</button>` : ''}
+    </div>`;
+  }).join('') || '<div class="tm-empty">No messages yet — say hello 👋</div>';
+  box.querySelectorAll('[data-reply]').forEach(el => el.onclick = () => {
+    const m = byId.get(+el.dataset.reply);
+    if (!m) return;
+    chatReplyTo = m; renderChatReplyBar(); $('chat-text').focus();
+  });
+  box.querySelectorAll('[data-chatdel]').forEach(b => b.onclick = async () => {
+    if (!confirmTwice(b)) return;
+    const { error } = await sb.from('chat_messages').delete().eq('id', +b.dataset.chatdel);
+    if (!error) { chatList = chatList.filter(m => m.id !== +b.dataset.chatdel); renderChatBody(); }
+  });
+  if (wasNearBottom) box.scrollTop = box.scrollHeight;
+}
+function renderChatReplyBar() {
+  const bar = $('chat-reply-bar');
+  if (!bar) return;
+  if (!chatReplyTo) { bar.classList.add('hidden'); bar.innerHTML = ''; return; }
+  bar.classList.remove('hidden');
+  const snippet = esc((chatReplyTo.body || (chatReplyTo.image_path ? 'photo' : '')).slice(0, 60));
+  bar.innerHTML = `<span>↩ Replying to <b>${esc(fmt(chatReplyTo.sender))}</b>: "${snippet}"</span><span id="chat-reply-x" style="cursor:pointer;font-weight:700">✕</span>`;
+  bar.querySelector('#chat-reply-x').onclick = () => { chatReplyTo = null; renderChatReplyBar(); };
+}
+function renderChatImgPreview() {
+  const box = $('chat-img-preview');
+  if (!box) return;
+  if (!chatPendingImg) { box.classList.add('hidden'); box.innerHTML = ''; return; }
+  box.classList.remove('hidden');
+  box.innerHTML = `<img src="${URL.createObjectURL(chatPendingImg)}" style="width:44px;height:44px;object-fit:cover;border-radius:9px">
+    <span class="sub" style="font-size:10.5px">${esc(chatPendingImg.name)}</span>
+    <span id="chat-img-x" style="cursor:pointer;font-weight:700;color:#e11d48">✕</span>`;
+  box.querySelector('#chat-img-x').onclick = () => { chatPendingImg = null; $('chat-file').value = ''; renderChatImgPreview(); };
+}
+function buildChatPanel(btn) {
+  chatPanel = makePanel('chat-panel', btn);
+  chatPanel.panel.innerHTML = `
+    <div class="tm-head"><div class="tm-title">👥 Group chat</div><div class="tm-sub" id="chat-online-line" style="margin-top:4px"></div></div>
+    <div class="tm-body" id="chat-body" style="flex:1;display:flex;flex-direction:column;gap:13px"></div>
+    <div id="chat-reply-bar" class="hidden" style="margin:0 14px 8px;padding:6px 11px;border-radius:9px;background:rgba(127,140,160,.1);border-left:3px solid var(--acc);font-size:10.5px;color:var(--mute);display:flex;align-items:center;justify-content:space-between;gap:10px"></div>
+    <div id="chat-img-preview" class="hidden" style="margin:0 14px 8px;display:flex;align-items:center;gap:9px"></div>
+    <div style="padding:10px 12px;border-top:1px solid var(--line);display:flex;align-items:center;gap:7px">
+      <input type="file" id="chat-file" accept="image/*" style="display:none">
+      <button class="btn" id="chat-attach" style="width:30px;height:30px;padding:0;border-radius:10px;font-size:14px;flex-shrink:0" title="Attach an image">+</button>
+      <input id="chat-text" class="ctl" style="flex:1;font-size:12px;padding:7px 12px;border-radius:12px" placeholder="Write a message..." maxlength="2000">
+      <button class="btn btn-pri" id="chat-send" style="padding:7px 14px;font-size:11px;border-radius:12px;flex-shrink:0">Send</button>
+    </div>
+    <div id="chat-err" class="sub" style="padding:0 14px 8px;color:#e11d48"></div>`;
+  const attachBtn = $('chat-attach'), fileInp = $('chat-file'), textInp = $('chat-text'), sendBtn = $('chat-send'), errEl = $('chat-err');
+  attachBtn.onclick = () => fileInp.click();
+  fileInp.onchange = () => { chatPendingImg = fileInp.files[0] || null; renderChatImgPreview(); };
+  const doSend = async () => {
+    const body = textInp.value.trim();
+    if (!body && !chatPendingImg) return;
+    sendBtn.disabled = true; errEl.innerText = '';
+    let image_path = null;
+    try {
+      if (chatPendingImg) {
+        const path = `${ME.name.replace(/[^a-z0-9]+/gi, '_')}_${Date.now()}_${chatPendingImg.name.replace(/[^a-z0-9.]+/gi, '_')}`;
+        const { error: upErr } = await sb.storage.from('chat-images').upload(path, chatPendingImg);
+        if (upErr) throw upErr;
+        image_path = path;
+      }
+      const { error } = await sb.from('chat_messages').insert({ sender: ME.name, body: body || null, image_path, reply_to: chatReplyTo?.id || null });
+      if (error) throw error;
+      textInp.value = ''; chatPendingImg = null; fileInp.value = ''; chatReplyTo = null;
+      renderChatImgPreview(); renderChatReplyBar();
+      await loadChat();
+    } catch (e) { errEl.innerText = e.message || 'Could not send'; }
+    sendBtn.disabled = false;
+  };
+  sendBtn.onclick = doSend;
+  textInp.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(); } });
+}
+function startChat() {
+  if (!ME || document.getElementById('chat-btn')) return;
+  const btn = topButton('chat-btn', '👥 <span id="chat-count" class="mc-badge" style="display:none;background:#f59e0b">0</span>', 'Group chat');
+  buildChatPanel(btn);
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (chatPanel.panel.classList.contains('open')) { chatPanel.panel.classList.remove('open'); return; }
+    chatPanel.open(); renderChatBody();
+    if (chatList && chatList.length) {
+      chatLastSeen = chatList[chatList.length - 1].id;
+      try { localStorage.setItem('qa-chat-seen', chatLastSeen); } catch (e) {}
+      renderChatBadge();
+    }
+    setTimeout(() => { const box = $('chat-body'); if (box) box.scrollTop = box.scrollHeight; }, 30);
+  });
+  loadChat();
+  sb.channel('chat-live').on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, debounce(loadChat, 300)).subscribe(() => {});
 }
 
 /* ---------- 💬 Feedback: users write to the admin, with their name or anonymously ---------- */
@@ -2327,6 +2463,7 @@ async function start() {
   startTargetHistory();
   startBreaks();
   startFeedback();
+  startChat();
   const c = await cacheGet();
   if (c && c.v === 3 && c.url === SUPABASE_URL && Array.isArray(c.data) && c.data.length) {
     allUsers = c.users || []; lastUpdMs = c.lastUpdMs || 0;
